@@ -2,7 +2,7 @@
   "name": "crystallography-image-tool",
   "version": "1.0.0",
   "description": "晶体学与微观图像科研辅助工具",
-  "main": "dist/main/electron/main.js",
+  "main": "dist/main.js",
   "scripts": {
     "dev": "node scripts/dev.js start",
     "dev:vite": "vite",

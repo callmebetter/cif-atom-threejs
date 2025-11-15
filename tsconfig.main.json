@@ -2,19 +2,16 @@
   "compilerOptions": {
     "target": "ES2020",
     "module": "CommonJS",
-    "outDir": "dist/main",
-    "rootDir": ".",
+    "outDir": "dist",
+    "rootDir": "./electron",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "moduleResolution": "node",
-    "baseUrl": ".",
-    "paths": {
-      "@backend/*": ["src/backend/*"]
-    }
+    "baseUrl": "."
   },
-  "include": ["electron/**/*", "src/backend/**/*"],
-  "exclude": ["node_modules", "dist", "src/renderer"]
+  "include": ["electron/**/*"],
+  "exclude": ["node_modules", "dist", "src/renderer", "src/main.ts", "src/router/**/*", "src/services/**/*", "src/stores/**/*", "src/utils/**/*", "src/views/**/*", "src/App.vue", "index.html"]
 }

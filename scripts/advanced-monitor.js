@@ -293,12 +293,22 @@ if (require.main === module) {
 const args = process.argv.slice(2);
 let command, commandArgs;
 
+// 首先确保 TypeScript 已编译
+console.log('🔧 检查 TypeScript 编译状态...', 'cyan');
+try {
+  require('child_process').execSync('npm run build:electron', { stdio: 'inherit' });
+  console.log('✅ TypeScript 编译完成', 'green');
+} catch (error) {
+  console.log('❌ TypeScript 编译失败', 'red');
+  process.exit(1);
+}
+
 if (args.length > 0) {
-  command = 'npm';
-  commandArgs = ['run', 'dev:electron', '--', ...args];
+  command = 'npx';
+  commandArgs = ['electron', '.', ...args];
 } else {
-  command = 'npm';
-  commandArgs = ['run', 'dev:electron'];
+  command = 'npx';
+  commandArgs = ['electron', '.'];
 }
 
 const electronProcess = monitor.startMonitoring(command, commandArgs);

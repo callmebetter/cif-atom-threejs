@@ -2,7 +2,7 @@ import { ipcMain, dialog, app } from 'electron'
 import { readFile, writeFile, mkdir } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join } from 'path'
-import { getDatabaseManager } from '@backend/database'
+import { getDatabaseManager } from './database'
 
 export function setupIpcHandlers(): void {
   // Initialize database
