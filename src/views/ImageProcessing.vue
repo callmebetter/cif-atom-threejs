@@ -39,7 +39,27 @@
                   <el-descriptions-item label="位深度">{{ tifInfo.bitsPerSample }} 位</el-descriptions-item>
                   <el-descriptions-item label="样本数">{{ tifInfo.samplesPerPixel }}</el-descriptions-item>
                   <el-descriptions-item label="压缩">{{ getCompressionName(tifInfo.compression) }}</el-descriptions-item>
+                  <el-descriptions-item v-if="tifInfo.isCompressed" label="压缩比">
+                    {{ compressionInfo?.compressionRatio?.toFixed(2) || 'N/A' }}:1
+                  </el-descriptions-item>
+                  <el-descriptions-item v-if="tifInfo.isCompressed" label="节省空间">
+                    {{ compressionInfo?.spaceSaved || 'N/A' }}
+                  </el-descriptions-item>
+                  <el-descriptions-item v-if="tifInfo.originalSize" label="原始大小">
+                    {{ formatFileSize(tifInfo.originalSize) }}
+                  </el-descriptions-item>
+                  <el-descriptions-item v-if="tifInfo.compressedSize" label="压缩后大小">
+                    {{ formatFileSize(tifInfo.compressedSize) }}
+                  </el-descriptions-item>
                 </el-descriptions>
+                
+                <!-- 压缩操作按钮 -->
+                <div v-if="tifInfo.isCompressed" class="compression-actions">
+                  <el-button size="small" @click="showDecompressionInfo">
+                    <el-icon><InfoFilled /></el-icon>
+                    解压详情
+                  </el-button>
+                </div>
               </div>
               
               <el-form label-width="80px">
@@ -74,6 +94,10 @@
               <div class="action-buttons">
                 <el-button @click="resetAdjustments">重置</el-button>
                 <el-button type="primary" @click="saveProcessedImage">保存</el-button>
+                <el-button v-if="originalImageData" type="success" @click="compressCurrentImage">
+                  <el-icon><FolderOpened /></el-icon>
+                  压缩图像
+                </el-button>
               </div>
             </div>
           </el-col>
@@ -88,6 +112,7 @@ import { ref, onMounted, watch } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { ElMessage } from 'element-plus'
 import { TifParser, type TifImageInfo } from '@/utils/tifParser'
+import { InfoFilled, FolderOpened } from '@element-plus/icons-vue'
 
 const appStore = useAppStore()
 
@@ -98,6 +123,12 @@ const contrast = ref(0)
 const zoom = ref(100)
 const originalImageData = ref<ImageData | null>(null)
 const tifInfo = ref<TifImageInfo | null>(null)
+const compressionInfo = ref<{
+  compressionRatio: number
+  spaceSaved: string
+  originalSize: number
+  compressedSize: number
+}>()
 
 const selectImage = async () => {
   if (!currentFile.value) return
@@ -125,6 +156,11 @@ const loadImageToCanvas = async (imageData: ArrayBuffer) => {
     const { info, imageData: parsedImageData } = await TifParser.parseTif(imageData)
     tifInfo.value = info
     
+    // 提取压缩信息
+    if (info.isCompressed) {
+      compressionInfo.value = tifParser.getCompressionInfo(arrayBuffer)
+    }
+    
     // Set canvas dimensions
     imageCanvas.value.width = info.width
     imageCanvas.value.height = info.height
@@ -138,7 +174,8 @@ const loadImageToCanvas = async (imageData: ArrayBuffer) => {
     ctx.putImageData(parsedImageData, 0, 0)
     originalImageData.value = ctx.getImageData(0, 0, info.width, info.height)
     
-    ElMessage.success(`TIF图像加载成功 (${info.width}x${info.height}, ${info.bitsPerSample}位)`)
+    const compressionText = info.isCompressed ? ' (压缩)' : ''
+    ElMessage.success(`TIF图像加载成功 (${info.width}x${info.height}, ${info.bitsPerSample}位${compressionText})`)
   } catch (error) {
     ElMessage.error('TIF图像解析失败: ' + error)
     console.error('TIF parsing error:', error)
@@ -245,6 +282,52 @@ const saveProcessedImage = async () => {
   }
 }
 
+const formatFileSize = (bytes: number): string => {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+
+const showDecompressionInfo = () => {
+  if (!compressionInfo.value) return
+  
+  ElMessage.info(
+    `压缩比: ${compressionInfo.value.compressionRatio.toFixed(2)}:1\n` +
+    `节省空间: ${compressionInfo.value.spaceSaved}\n` +
+    `原始大小: ${formatFileSize(compressionInfo.value.originalSize)}\n` +
+    `压缩后大小: ${formatFileSize(compressionInfo.value.compressedSize)}`
+  )
+}
+
+const compressCurrentImage = async () => {
+  if (!originalImageData.value || !tifInfo.value) return
+  
+  try {
+    // 使用pako压缩当前图像数据
+    const compressedData = tifParser.compressImageData(originalImageData.value.data)
+    
+    // 创建压缩后的TIF文件
+    const compressedTif = tifParser.createCompressedTif(
+      originalImageData.value,
+      tifInfo.value,
+      compressedData
+    )
+    
+    const fileName = `compressed_${currentFile.value?.name || 'image.tif'}`
+    const result = await window.electronAPI.saveFile(fileName, compressedTif)
+    
+    if (result.success) {
+      ElMessage.success(`图像压缩完成，压缩比: ${(originalImageData.value.data.length / compressedData.length).toFixed(2)}:1`)
+    } else {
+      ElMessage.error('图像压缩失败: ' + result.error)
+    }
+  } catch (error) {
+    ElMessage.error('图像压缩失败: ' + error)
+  }
+}
+
 watch(() => appStore.currentFile, (newFile) => {
   currentFile.value = newFile
   if (newFile && newFile.type === 'tif') {
@@ -325,6 +408,15 @@ onMounted(() => {
   margin: 0 0 10px 0;
   color: #1e40af;
   font-size: 14px;
+}
+
+.compression-actions {
+  margin-top: 15px;
+  text-align: center;
+}
+
+.compression-actions .el-button {
+  width: 100%;
 }
 
 .action-buttons {

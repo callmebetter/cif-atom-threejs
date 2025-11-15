@@ -1,4 +1,5 @@
 import UTIF from 'utif'
+import pako from 'pako'
 
 export interface TifImageInfo {
   width: number
@@ -11,16 +12,35 @@ export interface TifImageInfo {
   stripByteCounts: number[]
   rowsPerStrip: number
   imageDescription?: string
+  isCompressed?: boolean
+  originalSize?: number
+  compressedSize?: number
 }
 
 export class TifParser {
+  // Compression constants
+  private static readonly COMPRESSION_NONE = 1
+  private static readonly COMPRESSION_CCITT1D = 2
+  private static readonly COMPRESSION_GROUP3 = 3
+  private static readonly COMPRESSION_GROUP4 = 4
+  private static readonly COMPRESSION_LZW = 5
+  private static readonly COMPRESSION_JPEG = 6
+  private static readonly COMPRESSION_DEFLATE = 8
+  private static readonly COMPRESSION_ADOBE_DEFLATE = 32946
+  private static readonly COMPRESSION_PACKBITS = 32773
+
   static async parseTif(arrayBuffer: ArrayBuffer): Promise<{
     info: TifImageInfo
     imageData: ImageData
   }> {
     try {
+      const originalSize = arrayBuffer.byteLength
+      let processedBuffer = arrayBuffer
+      let isCompressed = false
+      let compressedSize = originalSize
+
       // Parse the TIFF file
-      const ifds = UTIF.decode(arrayBuffer)
+      let ifds = UTIF.decode(processedBuffer)
       
       if (ifds.length === 0) {
         throw new Error('No TIFF pages found')
@@ -28,6 +48,23 @@ export class TifParser {
       
       // Get the first page
       const page = ifds[0]
+      
+      // Check if compression needs special handling
+      if (page.compression && page.compression !== this.COMPRESSION_NONE) {
+        isCompressed = true
+        
+        // Handle deflate compression with pako
+        if (page.compression === this.COMPRESSION_DEFLATE || 
+            page.compression === this.COMPRESSION_ADOBE_DEFLATE) {
+          processedBuffer = await this.handleDeflateCompression(processedBuffer, page)
+        }
+        
+        // Re-parse after decompression
+        ifds = UTIF.decode(processedBuffer)
+        if (ifds.length === 0) {
+          throw new Error('No TIFF pages found after decompression')
+        }
+      }
       
       // Extract image information
       const info: TifImageInfo = {
@@ -40,11 +77,14 @@ export class TifParser {
         stripOffsets: page.stripOffsets || [],
         stripByteCounts: page.stripByteCounts || [],
         rowsPerStrip: page.rowsPerStrip || page.height,
-        imageDescription: page.imageDescription
+        imageDescription: page.imageDescription,
+        isCompressed,
+        originalSize,
+        compressedSize: isCompressed ? compressedSize : undefined
       }
       
       // Decode the image
-      UTIF.decodeImage(arrayBuffer, page)
+      UTIF.decodeImage(processedBuffer, page)
       
       // Get RGBA data
       const rgba = UTIF.toRGBA8(page)
@@ -59,6 +99,61 @@ export class TifParser {
       return { info, imageData }
     } catch (error) {
       throw new Error(`TIF parsing failed: ${error}`)
+    }
+  }
+
+  private static async handleDeflateCompression(
+    arrayBuffer: ArrayBuffer, 
+    page: any
+  ): Promise<ArrayBuffer> {
+    try {
+      // For deflate compressed TIFFs, we need to extract and decompress the strips
+      const dataView = new DataView(arrayBuffer)
+      const strips: Uint8Array[] = []
+      
+      // Extract compressed strips
+      if (page.stripOffsets && page.stripByteCounts) {
+        for (let i = 0; i < page.stripOffsets.length; i++) {
+          const offset = page.stripOffsets[i]
+          const byteCount = page.stripByteCounts[i]
+          
+          const compressedData = new Uint8Array(
+            arrayBuffer,
+            offset,
+            byteCount
+          )
+          
+          try {
+            // Try to decompress with pako
+            const decompressed = pako.inflate(compressedData)
+            strips.push(decompressed)
+          } catch (inflateError) {
+            // If inflate fails, try raw
+            try {
+              const decompressed = pako.inflateRaw(compressedData)
+              strips.push(decompressed)
+            } catch (rawError) {
+              console.warn('Decompression failed, using original data:', rawError)
+              strips.push(compressedData)
+            }
+          }
+        }
+      }
+      
+      // Combine all strips
+      const totalLength = strips.reduce((sum, strip) => sum + strip.length, 0)
+      const combinedData = new Uint8Array(totalLength)
+      let offset = 0
+      
+      for (const strip of strips) {
+        combinedData.set(strip, offset)
+        offset += strip.length
+      }
+      
+      return combinedData.buffer
+    } catch (error) {
+      console.warn('Deflate decompression failed, using original buffer:', error)
+      return arrayBuffer
     }
   }
   
@@ -81,7 +176,7 @@ export class TifParser {
     
     return { canvas, info }
   }
-  
+
   static validateTifFile(file: ArrayBuffer): boolean {
     try {
       // Check TIFF signature
@@ -92,6 +187,121 @@ export class TifParser {
       return signature === 0x4949 || signature === 0x4D4D
     } catch {
       return false
+    }
+  }
+
+  // Compress image data using pako
+  static compressImageData(imageData: Uint8Array, level: number = 6): Uint8Array {
+    try {
+      return pako.deflate(imageData, { level })
+    } catch (error) {
+      throw new Error(`Image compression failed: ${error}`)
+    }
+  }
+
+  // Decompress image data using pako
+  static decompressImageData(compressedData: Uint8Array): Uint8Array {
+    try {
+      return pako.inflate(compressedData)
+    } catch (error) {
+      try {
+        return pako.inflateRaw(compressedData)
+      } catch (rawError) {
+        throw new Error(`Image decompression failed: ${rawError}`)
+      }
+    }
+  }
+
+  // Get compression ratio information
+  static getCompressionInfo(original: Uint8Array, compressed: Uint8Array): {
+    originalSize: number
+    compressedSize: number
+    compressionRatio: number
+    spaceSaved: number
+  } {
+    const originalSize = original.length
+    const compressedSize = compressed.length
+    const compressionRatio = originalSize / compressedSize
+    const spaceSaved = ((originalSize - compressedSize) / originalSize) * 100
+
+    return {
+      originalSize,
+      compressedSize,
+      compressionRatio,
+      spaceSaved
+    }
+  }
+
+  // Create compressed TIF data
+  static async createCompressedTif(
+    imageData: ImageData,
+    compression: number = this.COMPRESSION_DEFLATE
+  ): Promise<ArrayBuffer> {
+    try {
+      // Convert ImageData to raw data
+      const rawData = new Uint8Array(imageData.data)
+      
+      // Compress the data if needed
+      let processedData = rawData
+      if (compression !== this.COMPRESSION_NONE) {
+        processedData = this.compressImageData(rawData)
+      }
+
+      // Create a simple TIF structure (this is a simplified implementation)
+      // In practice, you'd want to use a more complete TIF writer
+      const tifHeader = new ArrayBuffer(8 + processedData.length)
+      const view = new DataView(tifHeader)
+      
+      // TIFF Header
+      view.setUint16(0, 0x4D4D, false) // MM (Big endian)
+      view.setUint16(2, 42, false)     // TIFF magic number
+      view.setUint32(4, 8, false)      // Offset to first IFD
+
+      // Note: This is a very simplified TIF creation
+      // A complete implementation would need proper IFD structure
+      // For production use, consider using a dedicated TIF library
+      
+      return tifHeader
+    } catch (error) {
+      throw new Error(`Compressed TIF creation failed: ${error}`)
+    }
+  }
+
+  // Extract metadata from compressed TIF
+  static extractCompressionMetadata(info: TifImageInfo): {
+    compressionType: string
+    isCompressed: boolean
+    compressionRatio?: number
+    spaceSaved?: string
+  } {
+    const compressionTypes: { [key: number]: string } = {
+      [this.COMPRESSION_NONE]: 'None',
+      [this.COMPRESSION_CCITT1D]: 'CCITT 1D',
+      [this.COMPRESSION_GROUP3]: 'Group 3 Fax',
+      [this.COMPRESSION_GROUP4]: 'Group 4 Fax',
+      [this.COMPRESSION_LZW]: 'LZW',
+      [this.COMPRESSION_JPEG]: 'JPEG',
+      [this.COMPRESSION_DEFLATE]: 'Deflate',
+      [this.COMPRESSION_ADOBE_DEFLATE]: 'Adobe Deflate',
+      [this.COMPRESSION_PACKBITS]: 'PackBits'
+    }
+
+    const compressionType = compressionTypes[info.compression] || 'Unknown'
+    const isCompressed = info.compression !== this.COMPRESSION_NONE
+
+    let compressionRatio: number | undefined
+    let spaceSaved: string | undefined
+
+    if (isCompressed && info.originalSize && info.compressedSize) {
+      compressionRatio = info.originalSize / info.compressedSize
+      spaceSaved = `${((info.originalSize - info.compressedSize) / info.originalSize * 100).toFixed(1)}%`
+    }
+
+    return {
+      compressionType,
+      isCompressed,
+      compressionRatio,
+      spaceSaved
     }
   }
 }

@@ -33,6 +33,16 @@ const router = createRouter({
           path: '/component-analysis',
           name: 'ComponentAnalysis',
           component: () => import('@/views/ComponentAnalysis.vue')
+        },
+        {
+          path: '/image-mesh',
+          name: 'ImageMesh',
+          component: () => import('@/views/ImageMesh.vue')
+        },
+        {
+          path: '/report-generator',
+          name: 'ReportGenerator',
+          component: () => import('@/views/ReportGenerator.vue')
         }
       ]
     }

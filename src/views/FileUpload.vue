@@ -138,10 +138,51 @@ const selectFiles = async () => {
     })
 
     if (result.success && result.files && result.files.length > 0) {
-      handleSelectedFiles(result.files)
+      // Validate file paths
+      const validPaths = result.files.filter(path => {
+        if (!path || typeof path !== 'string') {
+          console.warn('Invalid file path:', path)
+          return false
+        }
+        return true
+      })
+
+      if (validPaths.length === 0) {
+        ElMessage.warning('没有选择有效的文件')
+        return
+      }
+
+      if (validPaths.length < result.files.length) {
+        ElMessage.warning(`过滤了 ${result.files.length - validPaths.length} 个无效文件路径`)
+      }
+
+      // Check file types
+      const supportedExtensions = ['.cif', '.tif', '.zip']
+      const unsupportedFiles = validPaths.filter(path => {
+        const ext = path.toLowerCase().substring(path.lastIndexOf('.'))
+        return !supportedExtensions.includes(ext)
+      })
+
+      if (unsupportedFiles.length > 0) {
+        ElMessage.warning(`跳过 ${unsupportedFiles.length} 个不支持的文件类型`)
+      }
+
+      const supportedFiles = validPaths.filter(path => {
+        const ext = path.toLowerCase().substring(path.lastIndexOf('.'))
+        return supportedExtensions.includes(ext)
+      })
+
+      if (supportedFiles.length === 0) {
+        ElMessage.error('没有支持的文件类型')
+        return
+      }
+
+      handleSelectedFiles(supportedFiles)
     }
   } catch (error) {
-    ElMessage.error('文件选择失败: ' + error)
+    const errorMessage = error instanceof Error ? error.message : '选择文件时发生未知错误'
+    console.error('File selection error:', errorMessage)
+    ElMessage.error(`文件选择失败: ${errorMessage}`)
   }
 }
 

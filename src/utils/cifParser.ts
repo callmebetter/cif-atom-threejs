@@ -54,122 +54,191 @@ export class CifParser {
   private static readonly VERSION = '1.0.0'
   
   static parse(content: string, filename?: string): CifData {
-    const data: CifData = {
-      atoms: [],
-      metadata: {
-        parse_date: new Date().toISOString(),
-        parser_version: this.VERSION,
-        warnings: []
-      }
+    if (!content || typeof content !== 'string') {
+      throw new Error('CIF文件内容无效或为空')
     }
-    
-    if (filename) {
-      data.filename = filename
-    }
-    
-    const lines = content.split('\n')
-    let inAtomLoop = false
-    let atomLabels: string[] = []
-    let atomData: string[][] = []
-    
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim()
-      
-      // 跳过空行和注释
-      if (!line || line.startsWith('#')) continue
-      
-      // 解析标题
-      if (line.startsWith('_data_name') || line.startsWith('_publ_section_title')) {
-        data.title = this.extractValue(line)
-      }
-      
-      // 解析化学式
-      if (line.startsWith('_chemical_formula_sum')) {
-        data.chemical_formula_sum = this.extractValue(line)
-      }
-      if (line.startsWith('_chemical_formula_moiety')) {
-        data.chemical_formula_moiety = this.extractValue(line)
-      }
-      if (line.startsWith('_chemical_name_mineral')) {
-        data.chemical_name = this.extractValue(line)
-      }
-      
-      // 解析晶系
-      if (line.startsWith('_symmetry_cell_setting') || line.startsWith('_space_group_crystal_system')) {
-        data.crystal_system = this.extractValue(line)
-      }
-      
-      // 解析空间群
-      if (line.startsWith('_space_group_name_H-M') || line.startsWith('_symmetry_space_group_name_H-M')) {
-        if (!data.symmetry) data.symmetry = {}
-        data.symmetry.space_group_name_hm = this.extractValue(line)
-      }
-      if (line.startsWith('_space_group_name_Hall')) {
-        if (!data.symmetry) data.symmetry = {}
-        data.symmetry.space_group_name_hall = this.extractValue(line)
-      }
-      
-      // 解析晶胞参数
-      if (!data.cell_parameters) {
-        data.cell_parameters = { a: 0, b: 0, c: 0, alpha: 90, beta: 90, gamma: 90 }
-      }
-      
-      if (line.startsWith('_cell_length_a')) {
-        data.cell_parameters.a = parseFloat(this.extractValue(line))
-      }
-      if (line.startsWith('_cell_length_b')) {
-        data.cell_parameters.b = parseFloat(this.extractValue(line))
-      }
-      if (line.startsWith('_cell_length_c')) {
-        data.cell_parameters.c = parseFloat(this.extractValue(line))
-      }
-      if (line.startsWith('_cell_angle_alpha')) {
-        data.cell_parameters.alpha = parseFloat(this.extractValue(line))
-      }
-      if (line.startsWith('_cell_angle_beta')) {
-        data.cell_parameters.beta = parseFloat(this.extractValue(line))
-      }
-      if (line.startsWith('_cell_angle_gamma')) {
-        data.cell_parameters.gamma = parseFloat(this.extractValue(line))
-      }
-      
-      // 检测原子循环开始
-      if (line.startsWith('_atom_site_')) {
-        inAtomLoop = true
-        atomLabels.push(line)
-      }
-      
-      // 解析原子数据
-      if (inAtomLoop && !line.startsWith('_') && line.length > 0) {
-        const parts = line.split(/\s+/).filter(p => p.length > 0)
-        if (parts.length >= 1) {
-          atomData.push(parts)
+
+    try {
+      const data: CifData = {
+        atoms: [],
+        metadata: {
+          parse_date: new Date().toISOString(),
+          parser_version: this.VERSION,
+          warnings: []
         }
       }
       
-      // 检测循环结束
-      if (inAtomLoop && line.startsWith('_') && !line.startsWith('_atom_site_')) {
-        inAtomLoop = false
+      if (filename) {
+        data.filename = filename
       }
+      
+      const lines = content.split('\n')
+      let inAtomLoop = false
+      let atomLabels: string[] = []
+      let atomData: string[][] = []
+      
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim()
+        
+        // 跳过空行和注释
+        if (!line || line.startsWith('#')) continue
+        
+        // 解析标题
+        if (line.startsWith('_data_name') || line.startsWith('_publ_section_title')) {
+          data.title = this.extractValue(line)
+          continue
+        }
+        
+        // 解析化学式
+        if (line.startsWith('_chemical_formula_sum')) {
+          data.chemical_formula_sum = this.extractValue(line)
+          continue
+        }
+        if (line.startsWith('_chemical_formula_moiety')) {
+          data.chemical_formula_moiety = this.extractValue(line)
+          continue
+        }
+        if (line.startsWith('_chemical_name_mineral')) {
+          data.chemical_name = this.extractValue(line)
+          continue
+        }
+        
+        // 解析晶系
+        if (line.startsWith('_symmetry_cell_setting') || line.startsWith('_space_group_crystal_system')) {
+          data.crystal_system = this.extractValue(line)
+          continue
+        }
+        
+        // 解析空间群
+        if (line.startsWith('_space_group_name_H-M') || line.startsWith('_symmetry_space_group_name_H-M')) {
+          if (!data.symmetry) data.symmetry = {}
+          data.symmetry.space_group_name_hm = this.extractValue(line)
+          continue
+        }
+        if (line.startsWith('_space_group_name_Hall')) {
+          if (!data.symmetry) data.symmetry = {}
+          data.symmetry.space_group_name_hall = this.extractValue(line)
+          continue
+        }
+        
+        // 解析晶胞参数
+        if (!data.cell_parameters) {
+          data.cell_parameters = { a: 0, b: 0, c: 0, alpha: 90, beta: 90, gamma: 90 }
+        }
+        
+        if (line.startsWith('_cell_length_a')) {
+          const value = parseFloat(this.extractValue(line))
+          if (!isNaN(value) && value > 0) {
+            data.cell_parameters.a = value
+          } else {
+            data.metadata!.warnings.push(`无效的晶胞参数a: ${this.extractValue(line)}`)
+          }
+          continue
+        }
+        if (line.startsWith('_cell_length_b')) {
+          const value = parseFloat(this.extractValue(line))
+          if (!isNaN(value) && value > 0) {
+            data.cell_parameters.b = value
+          } else {
+            data.metadata!.warnings.push(`无效的晶胞参数b: ${this.extractValue(line)}`)
+          }
+          continue
+        }
+        if (line.startsWith('_cell_length_c')) {
+          const value = parseFloat(this.extractValue(line))
+          if (!isNaN(value) && value > 0) {
+            data.cell_parameters.c = value
+          } else {
+            data.metadata!.warnings.push(`无效的晶胞参数c: ${this.extractValue(line)}`)
+          }
+          continue
+        }
+        if (line.startsWith('_cell_angle_alpha')) {
+          const value = parseFloat(this.extractValue(line))
+          if (!isNaN(value) && value > 0 && value <= 180) {
+            data.cell_parameters.alpha = value
+          } else {
+            data.metadata!.warnings.push(`无效的晶胞角度alpha: ${this.extractValue(line)}`)
+          }
+          continue
+        }
+        if (line.startsWith('_cell_angle_beta')) {
+          const value = parseFloat(this.extractValue(line))
+          if (!isNaN(value) && value > 0 && value <= 180) {
+            data.cell_parameters.beta = value
+          } else {
+            data.metadata!.warnings.push(`无效的晶胞角度beta: ${this.extractValue(line)}`)
+          }
+          continue
+        }
+        if (line.startsWith('_cell_angle_gamma')) {
+          const value = parseFloat(this.extractValue(line))
+          if (!isNaN(value) && value > 0 && value <= 180) {
+            data.cell_parameters.gamma = value
+          } else {
+            data.metadata!.warnings.push(`无效的晶胞角度gamma: ${this.extractValue(line)}`)
+          }
+          continue
+        }
+        
+        // 检测原子循环开始
+        if (line.startsWith('_atom_site_')) {
+          inAtomLoop = true
+          atomLabels.push(line)
+          continue
+        }
+        
+        // 解析原子数据
+        if (inAtomLoop && !line.startsWith('_') && line.length > 0) {
+          const parts = line.split(/\s+/).filter(p => p.length > 0)
+          if (parts.length >= 1) {
+            atomData.push(parts)
+          }
+          continue
+        }
+        
+        // 检测循环结束
+        if (inAtomLoop && line.startsWith('_') && !line.startsWith('_atom_site_')) {
+          inAtomLoop = false
+        }
+      }
+      
+      // 处理原子数据
+      if (atomData.length > 0) {
+        try {
+          data.atoms = this.parseAtomData(atomLabels, atomData, data.metadata!)
+        } catch (error) {
+          data.metadata!.warnings.push(`原子数据解析失败: ${error instanceof Error ? error.message : String(error)}`)
+        }
+      }
+      
+      // 计算晶胞体积
+      if (data.cell_parameters && data.cell_parameters.a > 0 && data.cell_parameters.b > 0 && data.cell_parameters.c > 0) {
+        try {
+          data.cell_parameters.volume = this.calculateCellVolume(data.cell_parameters)
+        } catch (error) {
+          data.metadata!.warnings.push(`晶胞体积计算失败: ${error instanceof Error ? error.message : String(error)}`)
+        }
+      }
+      
+      // 验证解析结果
+      if (data.atoms.length === 0) {
+        data.metadata!.warnings.push('未解析到原子数据，使用示例数据')
+        data.atoms = this.getExampleAtoms()
+      }
+      
+      if (!data.title) {
+        data.metadata!.warnings.push('未找到标题信息')
+      }
+      
+      if (!data.cell_parameters || data.cell_parameters.a === 0) {
+        data.metadata!.warnings.push('晶胞参数不完整')
+      }
+      
+      return data
+    } catch (error) {
+      throw new Error(`CIF文件解析失败: ${error instanceof Error ? error.message : String(error)}`)
     }
-    
-    // 处理原子数据
-    if (atomData.length > 0) {
-      data.atoms = this.parseAtomData(atomLabels, atomData, data.metadata!)
-    }
-    
-    // 计算晶胞体积
-    if (data.cell_parameters) {
-      data.cell_parameters.volume = this.calculateCellVolume(data.cell_parameters)
-    }
-    
-    // 如果没有解析到原子，使用示例数据
-    if (data.atoms.length === 0) {
-      data.metadata!.warnings.push('未解析到原子数据，使用示例数据')
-      data.atoms = this.getExampleAtoms()
-    }
-    
-    return data
   }
   
   private static extractValue(line: string): string {

@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { ProjectRecord, AnalysisRecord, SettingsRecord, DatabaseStats } from '../types/electron'
+import databaseService from '../services/databaseService'
 
 export interface AppDataPaths {
   appData: string
@@ -26,6 +28,14 @@ export const useAppStore = defineStore('app', () => {
   const loadedFiles = ref<FileInfo[]>([])
   const currentFile = ref<FileInfo | null>(null)
   const isLoading = ref(false)
+
+  // Database state
+  const projects = ref<ProjectRecord[]>([])
+  const currentProject = ref<ProjectRecord | null>(null)
+  const analysisRecords = ref<AnalysisRecord[]>([])
+  const settings = ref<SettingsRecord[]>([])
+  const databaseStats = ref<DatabaseStats | null>(null)
+  const cifData = ref<any>(null)
 
   // Actions
   const setStatus = (status: string) => {
@@ -73,6 +83,134 @@ export const useAppStore = defineStore('app', () => {
     currentFile.value = null
   }
 
+  // Database actions
+  const loadProjects = async () => {
+    try {
+      projects.value = await databaseService.getAllProjects()
+    } catch (error) {
+      console.error('Failed to load projects:', error)
+      throw error
+    }
+  }
+
+  const createProject = async (projectData: {
+    name: string
+    description?: string
+    cif_file_path: string
+    tif_file_path?: string
+  }) => {
+    try {
+      const project = await databaseService.createProject(projectData)
+      projects.value.push(project)
+      return project
+    } catch (error) {
+      console.error('Failed to create project:', error)
+      throw error
+    }
+  }
+
+  const updateProject = async (id: number, updates: Partial<ProjectRecord>) => {
+    try {
+      const project = await databaseService.updateProject(id, updates)
+      const index = projects.value.findIndex(p => p.id === id)
+      if (index > -1) {
+        projects.value[index] = project
+      }
+      if (currentProject.value?.id === id) {
+        currentProject.value = project
+      }
+      return project
+    } catch (error) {
+      console.error('Failed to update project:', error)
+      throw error
+    }
+  }
+
+  const deleteProject = async (id: number) => {
+    try {
+      await databaseService.deleteProject(id)
+      projects.value = projects.value.filter(p => p.id !== id)
+      if (currentProject.value?.id === id) {
+        currentProject.value = null
+      }
+    } catch (error) {
+      console.error('Failed to delete project:', error)
+      throw error
+    }
+  }
+
+  const setCurrentProject = (project: ProjectRecord | null) => {
+    currentProject.value = project
+  }
+
+  const loadAnalysisRecords = async (projectId?: number, analysisType?: string) => {
+    try {
+      analysisRecords.value = await databaseService.getAnalysisRecords(projectId, analysisType)
+    } catch (error) {
+      console.error('Failed to load analysis records:', error)
+      throw error
+    }
+  }
+
+  const createAnalysisRecord = async (analysisData: {
+    project_id: number
+    analysis_type: string
+    parameters: string
+    result_path?: string
+    status: 'pending' | 'running' | 'completed' | 'failed'
+    error_message?: string
+  }) => {
+    try {
+      const record = await databaseService.createAnalysisRecord(analysisData)
+      analysisRecords.value.push(record)
+      return record
+    } catch (error) {
+      console.error('Failed to create analysis record:', error)
+      throw error
+    }
+  }
+
+  const loadSettings = async () => {
+    try {
+      settings.value = await databaseService.getAllSettings()
+    } catch (error) {
+      console.error('Failed to load settings:', error)
+      throw error
+    }
+  }
+
+  const getSetting = async (key: string): Promise<string | null> => {
+    try {
+      return await databaseService.getSetting(key)
+    } catch (error) {
+      console.error('Failed to get setting:', error)
+      throw error
+    }
+  }
+
+  const setSetting = async (key: string, value: string) => {
+    try {
+      await databaseService.setSetting(key, value)
+      await loadSettings() // Reload settings
+    } catch (error) {
+      console.error('Failed to set setting:', error)
+      throw error
+    }
+  }
+
+  const loadDatabaseStats = async () => {
+    try {
+      databaseStats.value = await databaseService.getStats()
+    } catch (error) {
+      console.error('Failed to load database stats:', error)
+      throw error
+    }
+  }
+
+  const setCifData = (data: any) => {
+    cifData.value = data
+  }
+
   return {
     // State
     statusText,
@@ -81,6 +219,12 @@ export const useAppStore = defineStore('app', () => {
     loadedFiles,
     currentFile,
     isLoading,
+    projects,
+    currentProject,
+    analysisRecords,
+    settings,
+    databaseStats,
+    cifData,
     
     // Actions
     setStatus,
@@ -90,6 +234,18 @@ export const useAppStore = defineStore('app', () => {
     setCurrentFile,
     setLoading,
     updateFileStatus,
-    clearFiles
+    clearFiles,
+    loadProjects,
+    createProject,
+    updateProject,
+    deleteProject,
+    setCurrentProject,
+    loadAnalysisRecords,
+    createAnalysisRecord,
+    loadSettings,
+    getSetting,
+    setSetting,
+    loadDatabaseStats,
+    setCifData
   }
 })

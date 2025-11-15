@@ -98,233 +98,186 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { ElMessage } from 'element-plus'
-import * as THREE from 'three'
+import { StructureVisualizer, VisualizationOptions } from '@/utils/structureVisualizer'
+import { CifData } from '@/utils/cifParser'
 
 const appStore = useAppStore()
 
 const threejsContainer = ref<HTMLElement>()
 const hasStructureData = ref(false)
-const displayMode = ref('ball-stick')
+const displayMode = ref<'ball-stick' | 'space-filling' | 'wireframe'>('ball-stick')
 const atomSize = ref(1)
 const bondThickness = ref(0.3)
-const rotationSpeed = ref(0.01)
+const rotationSpeed = ref(0)
 const backgroundColor = ref('#ffffff')
 const visibleElements = ref<string[]>([])
 
-let scene: THREE.Scene
-let camera: THREE.PerspectiveCamera
-let renderer: THREE.WebGLRenderer
-let animationId: number
-let atoms: THREE.Group[] = []
-let bonds: THREE.Line[] = []
+let visualizer: StructureVisualizer | null = null
+let currentCifData: CifData | null = null
 
-const availableElements = ref(['C', 'H', 'O', 'N', 'S', 'P', 'Fe', 'Cu', 'Zn'])
+const availableElements = ref(['H', 'He', 'Li', 'Be', 'B', 'C', 'N', 'O', 'F', 'Ne', 
+  'Na', 'Mg', 'Al', 'Si', 'P', 'S', 'Cl', 'Ar', 'K', 'Ca', 'Fe', 'Cu', 'Zn'])
 
-const elementColors: Record<string, number> = {
-  'C': 0x404040,
-  'H': 0xffffff,
-  'O': 0xff0000,
-  'N': 0x0000ff,
-  'S': 0xffff00,
-  'P': 0xffa500,
-  'Fe': 0xff8c00,
-  'Cu': 0xb87333,
-  'Zn': 0x7f8c8d
-}
-
-const initThreeJS = () => {
+const initVisualizer = () => {
   if (!threejsContainer.value) return
 
-  // 创建场景
-  scene = new THREE.Scene()
-  scene.background = new THREE.Color(backgroundColor.value)
-
-  // 创建相机
-  camera = new THREE.PerspectiveCamera(
-    75,
-    threejsContainer.value.clientWidth / threejsContainer.value.clientHeight,
-    0.1,
-    1000
-  )
-  camera.position.set(10, 10, 10)
-  camera.lookAt(0, 0, 0)
-
-  // 创建渲染器
-  renderer = new THREE.WebGLRenderer({ antialias: true })
-  renderer.setSize(threejsContainer.value.clientWidth, threejsContainer.value.clientHeight)
-  threejsContainer.value.appendChild(renderer.domElement)
-
-  // 添加光源
-  const ambientLight = new THREE.AmbientLight(0x404040)
-  scene.add(ambientLight)
-
-  const directionalLight = new THREE.DirectionalLight(0xffffff, 1)
-  directionalLight.position.set(10, 10, 10)
-  scene.add(directionalLight)
-
-  // 添加控制器
-  addControls()
-
-  // 开始动画循环
-  animate()
-}
-
-const addControls = () => {
-  // 这里应该添加OrbitControls，但为了简化暂时不实现
-  // 实际项目中需要安装和导入three/examples/jsm/controls/OrbitControls
-}
-
-const createMolecule = () => {
-  // 清除现有原子和键
-  atoms.forEach(atom => scene.remove(atom))
-  bonds.forEach(bond => scene.remove(bond))
-  atoms = []
-  bonds = []
-
-  // 创建示例分子结构（实际项目中应该从CIF数据创建）
-  const moleculeData = [
-    { element: 'C', x: 0, y: 0, z: 0 },
-    { element: 'H', x: 1, y: 0, z: 0 },
-    { element: 'O', x: 0, y: 1, z: 0 },
-    { element: 'N', x: 0, y: 0, z: 1 }
-  ]
-
-  // 创建原子
-  moleculeData.forEach(atom => {
-    if (visibleElements.value.includes(atom.element)) {
-      const geometry = new THREE.SphereGeometry(0.5 * atomSize.value, 32, 32)
-      const material = new THREE.MeshPhongMaterial({ 
-        color: elementColors[atom.element] || 0x808080 
-      })
-      const sphere = new THREE.Mesh(geometry, material)
-      sphere.position.set(atom.x, atom.y, atom.z)
-      
-      const group = new THREE.Group()
-      group.add(sphere)
-      scene.add(group)
-      atoms.push(group)
-    }
-  })
-
-  // 创建键
-  const bondsData = [
-    [0, 1], [0, 2], [0, 3] // C-H, C-O, C-N bonds
-  ]
-
-  bondsData.forEach(([start, end]) => {
-    const startAtom = moleculeData[start]
-    const endAtom = moleculeData[end]
-    
-    const geometry = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(startAtom.x, startAtom.y, startAtom.z),
-      new THREE.Vector3(endAtom.x, endAtom.y, endAtom.z)
-    ])
-    
-    const material = new THREE.LineBasicMaterial({ 
-      color: 0x808080,
-      linewidth: bondThickness.value
-    })
-    
-    const line = new THREE.Line(geometry, material)
-    scene.add(line)
-    bonds.push(line)
-  })
-}
-
-const animate = () => {
-  animationId = requestAnimationFrame(animate)
-
-  // 自动旋转
-  if (rotationSpeed.value > 0) {
-    atoms.forEach(atom => {
-      atom.rotation.y += rotationSpeed.value
-    })
+  const options: VisualizationOptions = {
+    displayMode: displayMode.value,
+    atomSize: atomSize.value,
+    bondThickness: bondThickness.value,
+    rotationSpeed: rotationSpeed.value,
+    backgroundColor: backgroundColor.value,
+    visibleElements: visibleElements.value
   }
 
-  renderer.render(scene, camera)
+  visualizer = new StructureVisualizer(threejsContainer.value, options)
+  
+  // 如果有CIF数据，加载结构
+  if (currentCifData) {
+    visualizer.loadStructure(currentCifData)
+  }
+}
+
+const loadCifData = () => {
+  try {
+    // 从appStore获取CIF数据
+    const cifData = appStore.cifData
+    
+    if (!cifData) {
+      throw new Error('CIF数据不存在')
+    }
+    
+    if (!cifData.atoms || !Array.isArray(cifData.atoms)) {
+      throw new Error('CIF数据中缺少原子信息')
+    }
+    
+    if (cifData.atoms.length === 0) {
+      throw new Error('CIF数据中没有原子')
+    }
+    
+    currentCifData = cifData
+    hasStructureData.value = true
+    
+    // 获取实际存在的元素
+    const elements = [...new Set(cifData.atoms.map(atom => atom.element))]
+    if (elements.length === 0) {
+      throw new Error('无法从原子数据中提取元素信息')
+    }
+    
+    availableElements.value = elements
+    
+    // 默认显示所有元素
+    visibleElements.value = elements
+    
+    if (!visualizer) {
+      throw new Error('可视化器未初始化')
+    }
+    
+    try {
+      visualizer.loadStructure(cifData)
+      console.log(`成功加载 ${cifData.atoms.length} 个原子的结构`)
+    } catch (vizError) {
+      const vizErrorMessage = vizError instanceof Error ? vizError.message : '可视化加载失败'
+      console.error('Visualization error:', vizErrorMessage)
+      throw new Error(`可视化加载失败: ${vizErrorMessage}`)
+    }
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : '加载CIF数据时发生未知错误'
+    console.error('Failed to load CIF data:', errorMessage)
+    hasStructureData.value = false
+    ElMessage.error(`加载CIF数据失败: ${errorMessage}`)
+  }
 }
 
 const resetView = () => {
-  camera.position.set(10, 10, 10)
-  camera.lookAt(0, 0, 0)
-  ElMessage.success('视图已重置')
+  if (visualizer) {
+    visualizer.resetView()
+    ElMessage.success('视图已重置')
+  }
 }
 
 const updateDisplay = () => {
-  createMolecule()
+  if (visualizer) {
+    visualizer.updateOptions({ displayMode: displayMode.value })
+  }
 }
 
 const updateAtomSize = () => {
-  createMolecule()
+  if (visualizer) {
+    visualizer.updateOptions({ atomSize: atomSize.value })
+  }
 }
 
 const updateBondThickness = () => {
-  createMolecule()
+  if (visualizer) {
+    visualizer.updateOptions({ bondThickness: bondThickness.value })
+  }
 }
 
 const updateRotationSpeed = () => {
-  // 速度会在animate函数中自动应用
+  if (visualizer) {
+    visualizer.updateOptions({ rotationSpeed: rotationSpeed.value })
+  }
 }
 
 const updateBackgroundColor = () => {
-  if (scene) {
-    scene.background = new THREE.Color(backgroundColor.value)
+  if (visualizer) {
+    visualizer.updateOptions({ backgroundColor: backgroundColor.value })
   }
 }
 
 const updateElementVisibility = () => {
-  createMolecule()
+  if (visualizer) {
+    visualizer.updateOptions({ visibleElements: visibleElements.value })
+  }
 }
 
 const exportImage = () => {
-  if (!renderer) return
+  if (!visualizer) {
+    ElMessage.error('可视化器未初始化')
+    return
+  }
   
-  const dataURL = renderer.domElement.toDataURL('image/png')
-  const link = document.createElement('a')
-  link.download = 'structure-visualization.png'
-  link.href = dataURL
-  link.click()
-  
-  ElMessage.success('图像导出成功')
-}
-
-const handleResize = () => {
-  if (!threejsContainer.value || !camera || !renderer) return
-  
-  camera.aspect = threejsContainer.value.clientWidth / threejsContainer.value.clientHeight
-  camera.updateProjectionMatrix()
-  renderer.setSize(threejsContainer.value.clientWidth, threejsContainer.value.clientHeight)
+  try {
+    const dataURL = visualizer.exportImage(1920, 1080)
+    const link = document.createElement('a')
+    link.download = 'crystal-structure.png'
+    link.href = dataURL
+    link.click()
+    
+    ElMessage.success('图像导出成功')
+  } catch (error) {
+    console.error('Export failed:', error)
+    ElMessage.error('图像导出失败')
+  }
 }
 
 onMounted(async () => {
   appStore.setStatus('3D结构可视化模块已就绪')
   
-  // 检查是否有结构数据
-  hasStructureData.value = true // 暂时设为true，实际应该检查appStore中的数据
-  
-  visibleElements.value = availableElements.value.slice(0, 5) // 默认显示前5个元素
+  // 加载CIF数据
+  loadCifData()
   
   await nextTick()
-  initThreeJS()
-  createMolecule()
-  
-  window.addEventListener('resize', handleResize)
+  initVisualizer()
 })
 
 onUnmounted(() => {
-  if (animationId) {
-    cancelAnimationFrame(animationId)
+  if (visualizer) {
+    visualizer.dispose()
+    visualizer = null
   }
-  
-  if (renderer) {
-    renderer.dispose()
-  }
-  
-  window.removeEventListener('resize', handleResize)
 })
+
+// 监听appStore中的cifData变化
+watch(() => appStore.cifData, (newData) => {
+  if (newData) {
+    loadCifData()
+  }
+}, { deep: true })
 </script>
 
 <style scoped>

@@ -48,6 +48,16 @@
             <el-icon><PieChart /></el-icon>
             <template #title>成分分析</template>
           </el-menu-item>
+          
+          <el-menu-item index="/image-mesh">
+            <el-icon><Grid /></el-icon>
+            <template #title>图像网格化</template>
+          </el-menu-item>
+          
+          <el-menu-item index="/report-generator">
+            <el-icon><Document /></el-icon>
+            <template #title>报告生成</template>
+          </el-menu-item>
         </el-menu>
         
         <div class="sidebar-toggle" @click="toggleSidebar">
