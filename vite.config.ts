@@ -15,6 +15,8 @@ export default defineConfig({
     }
   },
   server: {
-    port: 5173
+    port: 3000, // Use a different default port
+    strictPort: false, // Allow port to be automatically changed if occupied
+    host: true // Expose to network
   }
 })

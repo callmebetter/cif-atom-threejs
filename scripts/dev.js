@@ -76,6 +76,9 @@ function checkDevPrerequisites() {
 function startDevelopment() {
   log('\n🚀 Starting development servers...', 'cyan');
   
+  let vitePort = null;
+  let electronStarted = false;
+  
   // Start Vite dev server
   const viteProcess = spawn('npm', ['run', 'dev:vite'], {
     stdio: 'pipe',
@@ -83,52 +86,77 @@ function startDevelopment() {
   });
   
   viteProcess.stdout.on('data', (data) => {
-    const output = data.toString();
-    if (output.includes('Local:') || output.includes('ready')) {
-      log(`🌐 Vite server: ${output.trim()}`, 'green');
-    } else {
-      process.stdout.write(`${colors.blue}[Vite]${colors.reset} ${output}`);
-    }
-  });
+      const output = data.toString();
+      
+      // Extract port from Vite output - more flexible regex
+      const portMatch = output.match(/Local:\s*http:\/\/localhost:(\d+)/) || 
+                         output.match(/localhost:(\d+)/);
+      if (portMatch && !vitePort) {
+        vitePort = portMatch[1];
+        log(`🌐 Vite server running on port: ${vitePort}`, 'green');
+        
+        // Start Electron once we have the port
+        if (!electronStarted) {
+          electronStarted = true;
+          startElectron(vitePort, viteProcess);
+        }
+      } else if (output.includes('ready')) {
+        log(`🌐 Vite server: ${output.trim()}`, 'green');
+      } else {
+        process.stdout.write(`${colors.blue}[Vite]${colors.reset} ${output}`);
+      }
+    });
   
   viteProcess.stderr.on('data', (data) => {
     process.stderr.write(`${colors.red}[Vite Error]${colors.reset} ${data}`);
   });
   
-  // Wait for Vite to start before starting Electron
+  // Fallback: if no port detected after 5 seconds, start Electron anyway
   setTimeout(() => {
-    log('\n⚡ Starting Electron...', 'cyan');
-    
-    const electronProcess = spawn('npm', ['run', 'dev:electron'], {
-      stdio: 'pipe',
-      shell: true
-    });
-    
-    electronProcess.stdout.on('data', (data) => {
-      const output = data.toString();
-      process.stdout.write(`${colors.magenta}[Electron]${colors.reset} ${output}`);
-    });
-    
-    electronProcess.stderr.on('data', (data) => {
-      process.stderr.write(`${colors.red}[Electron Error]${colors.reset} ${data}`);
-    });
-    
-    electronProcess.on('close', (code) => {
-      if (code !== 0) {
-        log(`❌ Electron process exited with code ${code}`, 'red');
-      }
-      process.exit(code);
-    });
-    
-    // Handle process termination
-    process.on('SIGINT', () => {
-      log('\n🛑 Shutting down development servers...', 'yellow');
-      viteProcess.kill('SIGINT');
-      electronProcess.kill('SIGINT');
-      process.exit(0);
-    });
-    
-  }, 3000); // Wait 3 seconds for Vite to start
+    if (!electronStarted) {
+      log('⚠️  Could not detect Vite port, using default...', 'yellow');
+      electronStarted = true;
+      startElectron('3000', viteProcess); // Use the configured port
+    }
+  }, 5000);
+}
+
+function startElectron(vitePort, viteProcess) {
+  log('\n⚡ Starting Electron...', 'cyan');
+  log(`🔗 Connecting to Vite on port: ${vitePort}`, 'cyan');
+  
+  // Set environment variable for the port
+  const env = { ...process.env, VITE_PORT: vitePort };
+  
+  const electronProcess = spawn('npm', ['run', 'dev:electron'], {
+    stdio: 'pipe',
+    shell: true,
+    env
+  });
+  
+  electronProcess.stdout.on('data', (data) => {
+    const output = data.toString();
+    process.stdout.write(`${colors.magenta}[Electron]${colors.reset} ${output}`);
+  });
+  
+  electronProcess.stderr.on('data', (data) => {
+    process.stderr.write(`${colors.red}[Electron Error]${colors.reset} ${data}`);
+  });
+  
+  electronProcess.on('close', (code) => {
+    if (code !== 0) {
+      log(`❌ Electron process exited with code ${code}`, 'red');
+    }
+    process.exit(code);
+  });
+  
+  // Handle process termination
+  process.on('SIGINT', () => {
+    log('\n🛑 Shutting down development servers...', 'yellow');
+    viteProcess.kill('SIGINT');
+    electronProcess.kill('SIGINT');
+    process.exit(0);
+  });
 }
 
 function setupDatabase() {
@@ -153,8 +181,98 @@ function setupDatabase() {
   }
 }
 
+function startElectronOnly() {
+  log('\n⚡ Starting Electron with dynamic port detection...', 'cyan');
+  
+  // First, start Vite to get the port
+  const viteProcess = spawn('npm', ['run', 'dev:vite'], {
+    stdio: 'pipe',
+    shell: true
+  });
+  
+  let vitePort = null;
+  
+  viteProcess.stdout.on('data', (data) => {
+    const output = data.toString();
+    
+    // Extract port from Vite output - more flexible regex
+    const portMatch = output.match(/Local:\s*http:\/\/localhost:(\d+)/) || 
+                       output.match(/localhost:(\d+)/);
+    if (portMatch && !vitePort) {
+      vitePort = portMatch[1];
+      log(`🌐 Vite server detected on port: ${vitePort}`, 'green');
+      
+      // Start Electron with the detected port
+      const env = { ...process.env, VITE_PORT: vitePort };
+      const electronProcess = spawn('npx', ['electron', '.'], {
+        stdio: 'pipe',
+        shell: true,
+        env
+      });
+      
+      electronProcess.stdout.on('data', (data) => {
+        const output = data.toString();
+        process.stdout.write(`${colors.magenta}[Electron]${colors.reset} ${output}`);
+      });
+      
+      electronProcess.stderr.on('data', (data) => {
+        process.stderr.write(`${colors.red}[Electron Error]${colors.reset} ${data}`);
+      });
+      
+      electronProcess.on('close', (code) => {
+        if (code !== 0) {
+          log(`❌ Electron process exited with code ${code}`, 'red');
+        }
+        viteProcess.kill('SIGINT');
+        process.exit(code);
+      });
+      
+      // Handle process termination
+      process.on('SIGINT', () => {
+        log('\n🛑 Shutting down servers...', 'yellow');
+        viteProcess.kill('SIGINT');
+        electronProcess.kill('SIGINT');
+        process.exit(0);
+      });
+    } else {
+      process.stdout.write(`${colors.blue}[Vite]${colors.reset} ${output}`);
+    }
+  });
+  
+  viteProcess.stderr.on('data', (data) => {
+    process.stderr.write(`${colors.red}[Vite Error]${colors.reset} ${data}`);
+  });
+  
+  // Fallback timeout
+  setTimeout(() => {
+    if (!vitePort) {
+      log('⚠️  Could not detect Vite port, using default...', 'yellow');
+      const electronProcess = spawn('npx', ['electron', '.'], {
+        stdio: 'pipe',
+        shell: true
+      });
+      
+      electronProcess.stdout.on('data', (data) => {
+        const output = data.toString();
+        process.stdout.write(`${colors.magenta}[Electron]${colors.reset} ${output}`);
+      });
+      
+      electronProcess.stderr.on('data', (data) => {
+        process.stderr.write(`${colors.red}[Electron Error]${colors.reset} ${data}`);
+      });
+      
+      electronProcess.on('close', (code) => {
+        if (code !== 0) {
+          log(`❌ Electron process exited with code ${code}`, 'red');
+        }
+        viteProcess.kill('SIGINT');
+        process.exit(code);
+      });
+    }
+  }, 5000);
+}
+
 function runTests() {
-  log('\n🧪 Running tests...', 'cyan');
   
   // Check if test script exists
   const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
@@ -189,13 +307,13 @@ function showDevInfo() {
   log(`👤 Author: ${packageJson.author}`, 'blue');
   
   log('\n🔗 Development URLs:', 'blue');
-  log('🌐 Vite Dev Server: http://localhost:5173', 'green');
+  log('🌐 Vite Dev Server: http://localhost:[dynamic-port]', 'green');
   log('⚡ Electron App: Native window', 'green');
   
   log('\n🛠️  Available Commands:', 'blue');
   log('npm run dev        - Start development servers', 'yellow');
   log('npm run dev:vite   - Start Vite dev server only', 'yellow');
-  log('npm run dev:electron - Start Electron only', 'yellow');
+  log('npm run dev:electron - Start Electron with dynamic port detection', 'yellow');
   log('npm run test       - Run tests', 'yellow');
   log('npm run lint       - Run linting', 'yellow');
   log('npm run build      - Build for production', 'yellow');
@@ -223,6 +341,12 @@ function main() {
       startDevelopment();
       break;
       
+    case 'electron':
+      checkDevPrerequisites();
+      setupDatabase();
+      startElectronOnly();
+      break;
+      
     case 'test':
       checkDevPrerequisites();
       runTests();
@@ -246,7 +370,7 @@ function main() {
       
     default:
       log(`❌ Unknown command: ${command}`, 'red');
-      log('Available commands: setup, start, test, lint, check, info', 'yellow');
+      log('Available commands: setup, start, electron, test, lint, check, info', 'yellow');
       process.exit(1);
   }
 }

@@ -35,7 +35,9 @@ function createWindow(): void {
   // Load the app
   const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
   if (isDev) {
-    const devUrl = 'http://localhost:5173'
+    // Use dynamic port from environment variable or default to 3000
+    const port = process.env.VITE_PORT || '3000'
+    const devUrl = `http://localhost:${port}`
     win.loadURL(devUrl)
     win.webContents.openDevTools()
   } else {
