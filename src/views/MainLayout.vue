@@ -89,6 +89,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useAppStore } from '@/stores/app'
+import { fileOperations } from '@/platform/sdk'
 
 const appStore = useAppStore()
 
@@ -110,18 +111,18 @@ const toggleTheme = () => {
 
 onMounted(async () => {
   // Initialize app data directory
-  if (window.electronAPI) {
-    const result = await window.electronAPI.initAppData()
+  try {
+    const result = await fileOperations.initAppData()
     if (result.success) {
       appStore.setAppDataPaths(result.paths)
       appStore.setStatus('应用初始化完成')
     } else {
       appStore.setStatus('应用初始化失败: ' + result.error)
     }
-  } else {
+  } catch (error) {
     // Fallback for development without electron
     appStore.setStatus('开发模式 - Electron API 不可用')
-    console.warn('electronAPI is not available. Running in development mode.')
+    console.warn('electronAPI is not available. Running in development mode.', error)
   }
 })
 </script>

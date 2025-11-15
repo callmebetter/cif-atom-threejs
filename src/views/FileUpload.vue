@@ -108,9 +108,10 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAppStore } from '@/stores/app'
 import type { UploadFile, UploadFiles } from 'element-plus'
 import type { FileInfo } from '@/stores/app'
+import { fileOperations } from '@/platform/sdk'
 
-const router = useRouter()
 const appStore = useAppStore()
+const router = useRouter()
 
 const uploadRef = ref()
 const fileList = ref<UploadFiles>([])
@@ -127,7 +128,7 @@ const uploadedFiles = computed(() => appStore.loadedFiles)
 
 const selectFiles = async () => {
   try {
-    const result = await window.electronAPI.selectFile({
+    const result = await fileOperations.selectFile({
       filters: [
         { name: '支持的文件', extensions: ['cif', 'tif', 'zip'] },
         { name: 'CIF文件', extensions: ['cif'] },
@@ -225,7 +226,7 @@ const handleFileRemove = (file: UploadFile) => {
 
 const processSingleFile = async (filePath: string): Promise<FileInfo | null> => {
   try {
-    const result = await window.electronAPI.readFile(filePath)
+    const result = await fileOperations.readFile(filePath)
     if (!result.success) {
       throw new Error(result.error || '文件读取失败')
     }

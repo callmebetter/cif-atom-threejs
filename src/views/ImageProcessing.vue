@@ -113,6 +113,7 @@ import { useAppStore } from '@/stores/app'
 import { ElMessage } from 'element-plus'
 import { TifParser, type TifImageInfo } from '@/utils/tifParser'
 import { InfoFilled, FolderOpened } from '@element-plus/icons-vue'
+import { fileOperations } from '@/platform/sdk'
 
 const appStore = useAppStore()
 
@@ -134,7 +135,7 @@ const selectImage = async () => {
   if (!currentFile.value) return
   
   try {
-    const result = await window.electronAPI.readFile(currentFile.value.path)
+    const result = await fileOperations.readFile(currentFile.value.path)
     if (result.success && result.data) {
       loadImageToCanvas(result.data)
     }
@@ -158,7 +159,7 @@ const loadImageToCanvas = async (imageData: ArrayBuffer) => {
     
     // 提取压缩信息
     if (info.isCompressed) {
-      compressionInfo.value = tifParser.getCompressionInfo(arrayBuffer)
+      compressionInfo.value = TifParser.getCompressionInfo(imageData)
     }
     
     // Set canvas dimensions
@@ -175,24 +176,16 @@ const loadImageToCanvas = async (imageData: ArrayBuffer) => {
     originalImageData.value = ctx.getImageData(0, 0, info.width, info.height)
     
     const compressionText = info.isCompressed ? ' (压缩)' : ''
-    ElMessage.success(`TIF图像加载成功 (${info.width}x${info.height}, ${info.bitsPerSample}位${compressionText})`)
-  } catch (error) {
-    ElMessage.error('TIF图像解析失败: ' + error)
-    console.error('TIF parsing error:', error)
     
-    // Fallback: try to load as regular image
-    const img = new Image()
-    img.onload = () => {
-      if (!imageCanvas.value) return
-      const ctx = imageCanvas.value.getContext('2d')
-      if (!ctx) return
-      
-      imageCanvas.value.width = img.width
-      imageCanvas.value.height = img.height
-      ctx.drawImage(img, 0, 0)
-      originalImageData.value = ctx.getImageData(0, 0, img.width, img.height)
-    }
-    img.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
+    // Update app status
+    appStore.updateFileStatus(currentFile.value.id, true)
+    appStore.setStatus(`图像加载完成: ${info.width}x${info.height}, ${info.bitsPerSample}位, ${info.samplesPerPixel}通道${compressionText}`)
+    
+    ElMessage.success('图像加载成功')
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : '未知错误'
+    ElMessage.error(`图像加载失败: ${errorMessage}`)
+    console.error('Image loading error:', error)
   }
 }
 
@@ -271,7 +264,7 @@ const saveProcessedImage = async () => {
     const arrayBuffer = await blob.arrayBuffer()
     const fileName = `processed_${currentFile.value.name.replace('.tif', '.png')}`
     
-    const result = await window.electronAPI.saveFile(fileName, arrayBuffer)
+    const result = await fileOperations.saveFile(fileName, arrayBuffer)
     if (result.success) {
       ElMessage.success('图像保存成功')
     } else {
@@ -306,17 +299,17 @@ const compressCurrentImage = async () => {
   
   try {
     // 使用pako压缩当前图像数据
-    const compressedData = tifParser.compressImageData(originalImageData.value.data)
+    const compressedData = TifParser.compressImageData(originalImageData.value.data)
     
     // 创建压缩后的TIF文件
-    const compressedTif = tifParser.createCompressedTif(
+    const compressedTif = TifParser.createCompressedTif(
       originalImageData.value,
       tifInfo.value,
       compressedData
     )
     
     const fileName = `compressed_${currentFile.value?.name || 'image.tif'}`
-    const result = await window.electronAPI.saveFile(fileName, compressedTif)
+    const result = await fileOperations.saveFile(fileName, compressedTif)
     
     if (result.success) {
       ElMessage.success(`图像压缩完成，压缩比: ${(originalImageData.value.data.length / compressedData.length).toFixed(2)}:1`)

@@ -37,23 +37,25 @@ export interface DatabaseStats {
 }
 
 export interface ElectronAPI {
+  dialog: {
+    showOpenDialog: (options: Electron.OpenDialogOptions) => Promise<Electron.OpenDialogReturnValue>
+  }
+  
+  // Unified invoke method for all IPC channels
+  invoke: (channel: string, args: any) => Promise<any>
+
   // File operations
-  selectFile(options: {
-    filters?: Array<{ name: string; extensions: string[] }>
-    properties?: string[]
-  }): Promise<{
+  selectFile: (options: Electron.OpenDialogOptions) => Promise<{
     success: boolean
     files?: string[]
     error?: string
   }>
-
-  readFile(filePath: string): Promise<{
+  readFile: (filePath: string) => Promise<{
     success: boolean
     data?: ArrayBuffer
     error?: string
   }>
-
-  saveFile(fileName: string, data: ArrayBuffer): Promise<{
+  saveFile: (fileName: string, data: ArrayBuffer) => Promise<{
     success: boolean
     filePath?: string
     error?: string

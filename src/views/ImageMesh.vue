@@ -212,47 +212,72 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch, reactive } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useAppStore } from '@/stores/app'
-import { ElMessage } from 'element-plus'
-import { imageMeshGenerator, type MeshResult, type MeshConfig } from '@/utils/imageMeshGenerator'
+import { useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { imageMeshGenerator, type MeshConfig, type MeshResult } from '@/utils/imageMeshGenerator'
+import { InfoFilled, Warning } from '@element-plus/icons-vue'
+import { fileOperations } from '@/platform/sdk'
 
-const router = useRouter()
 const appStore = useAppStore()
+const router = useRouter()
 
 const currentFile = ref(appStore.currentFile)
-const originalCanvas = ref<HTMLCanvasElement>()
-const meshCanvas = ref<HTMLCanvasElement>()
 const imageLoaded = ref(false)
 const meshResult = ref<MeshResult | null>(null)
+const activeTab = ref('config')
 
-// 图像信息
-const imageInfo = reactive({
+// Canvas references
+const originalCanvas = ref<HTMLCanvasElement>()
+const meshCanvas = ref<HTMLCanvasElement>()
+
+// Image info
+const imageInfo = ref({
   width: 0,
   height: 0,
   format: ''
 })
 
-// 网格化配置
-const meshConfig = reactive<MeshConfig & { isValid: boolean; errorMessage: string }>({
-  type: 'triangular',
+// Mesh configuration
+const meshConfig = ref<MeshConfig>({
+  type: 'uniform',
   density: 50,
   adaptive: false,
-  adaptiveThreshold: 0.1,
-  edgeDetection: true,
-  edgeSensitivity: 1.0,
-  smoothing: 2.0,
-  qualityOptimization: true,
-  isValid: true,
-  errorMessage: ''
+  adaptiveThreshold: 0.5,
+  edgeDetection: false,
+  edgeSensitivity: 0.5,
+  smoothing: true,
+  qualityOptimization: true
 })
+
+// Validation
+const validationErrors = ref<string[]>([])
+
+const validateConfig = () => {
+  const errors: string[] = []
+  
+  if (meshConfig.value.density < 1 || meshConfig.value.density > 100) {
+    errors.push('网格密度必须在1-100之间')
+  }
+  
+  if (meshConfig.value.adaptiveThreshold < 0 || meshConfig.value.adaptiveThreshold > 1) {
+    errors.push('自适应阈值必须在0-1之间')
+  }
+  
+  if (meshConfig.value.edgeSensitivity < 0 || meshConfig.value.edgeSensitivity > 1) {
+    errors.push('边缘敏感度必须在0-1之间')
+  }
+  
+  validationErrors.value = errors
+  return errors.length === 0
+}
 
 const loadImage = async () => {
   if (!currentFile.value) return
   
   try {
-    const result = await window.electronAPI.readFile(currentFile.value.path)
+    const result = await fileOperations.readFile(currentFile.value.path)
     if (result.success && result.data) {
       const imageBlob = new Blob([result.data])
       const imageUrl = URL.createObjectURL(imageBlob)
@@ -300,133 +325,45 @@ const processImage = () => {
     )
 
     const config: MeshConfig = {
-      type: meshConfig.type,
-      density: meshConfig.density,
-      adaptive: meshConfig.adaptive,
-      adaptiveThreshold: meshConfig.adaptiveThreshold,
-      edgeDetection: meshConfig.edgeDetection,
-      edgeSensitivity: meshConfig.edgeSensitivity,
-      smoothing: meshConfig.smoothing,
-      qualityOptimization: meshConfig.qualityOptimization
+      type: meshConfig.value.type,
+      density: meshConfig.value.density,
+      adaptive: meshConfig.value.adaptive,
+      adaptiveThreshold: meshConfig.value.adaptiveThreshold,
+      edgeDetection: meshConfig.value.edgeDetection,
+      edgeSensitivity: meshConfig.value.edgeSensitivity,
+      smoothing: meshConfig.value.smoothing,
+      qualityOptimization: meshConfig.value.qualityOptimization
     }
 
     meshResult.value = imageMeshGenerator.generateMesh(imageData, config)
 
-    if (meshResult.value.success) {
-      visualizeMesh()
-      ElMessage.success('网格生成完成')
-    } else {
-      ElMessage.error('网格生成失败: ' + meshResult.value.error)
+    // 绘制网格结果
+    if (meshCanvas.value && meshResult.value) {
+      const ctx = meshCanvas.value.getContext('2d')!
+      meshCanvas.value.width = originalCanvas.value.width
+      meshCanvas.value.height = originalCanvas.value.height
+      imageMeshGenerator.visualizeMesh(ctx, meshResult.value, imageData)
     }
+
+    ElMessage.success('网格生成完成')
+    activeTab.value = 'result'
   } catch (error) {
     ElMessage.error('网格生成失败: ' + error)
   }
 }
 
-const visualizeMesh = () => {
-  if (!meshResult.value || !meshCanvas.value) return
-  
-  const ctx = meshCanvas.value.getContext('2d')!
-  const width = 400
-  const height = 300
-  
-  meshCanvas.value.width = width
-  meshCanvas.value.height = height
-  
-  // 清空画布
-  ctx.clearRect(0, 0, width, height)
-  
-  // 绘制网格
-  ctx.strokeStyle = '#409EFF'
-  ctx.lineWidth = 1
-  
-  const nodes = meshResult.value.nodes
-  const elements = meshResult.value.elements
-  
-  // 计算缩放比例
-  const minX = Math.min(...nodes.map(n => n.x))
-  const maxX = Math.max(...nodes.map(n => n.x))
-  const minY = Math.min(...nodes.map(n => n.y))
-  const maxY = Math.max(...nodes.map(n => n.y))
-  
-  const scaleX = (width - 40) / (maxX - minX)
-  const scaleY = (height - 40) / (maxY - minY)
-  const scale = Math.min(scaleX, scaleY)
-  
-  // 绘制单元
-  elements.forEach(element => {
-    ctx.beginPath()
-    element.nodeIndices.forEach((nodeIndex, i) => {
-      const node = nodes[nodeIndex]
-      const x = 20 + (node.x - minX) * scale
-      const y = 20 + (node.y - minY) * scale
-      
-      if (i === 0) {
-        ctx.moveTo(x, y)
-      } else {
-        ctx.lineTo(x, y)
-      }
-    })
-    ctx.closePath()
-    ctx.stroke()
-  })
-  
-  // 绘制节点
-  ctx.fillStyle = '#F56C6C'
-  nodes.forEach(node => {
-    const x = 20 + (node.x - minX) * scale
-    const y = 20 + (node.y - minY) * scale
-    
-    ctx.beginPath()
-    ctx.arc(x, y, 2, 0, 2 * Math.PI)
-    ctx.fill()
-  })
-}
-
-const onMeshTypeChange = () => {
-  validateConfig()
-}
-
-const onAdaptiveChange = () => {
-  if (!meshConfig.adaptive) {
-    meshConfig.adaptiveThreshold = 0.1
-  }
-  validateConfig()
-}
-
-const validateConfig = () => {
-  const errors: string[] = []
-  
-  if (meshConfig.density < 10 || meshConfig.density > 200) {
-    errors.push('网格密度必须在10-200之间')
-  }
-  
-  if (meshConfig.adaptive && (meshConfig.adaptiveThreshold < 0.01 || meshConfig.adaptiveThreshold > 1)) {
-    errors.push('自适应阈值必须在0.01-1之间')
-  }
-  
-  if (meshConfig.edgeSensitivity < 0.1 || meshConfig.edgeSensitivity > 2) {
-    errors.push('边缘敏感度必须在0.1-2之间')
-  }
-  
-  if (meshConfig.smoothing < 0 || meshConfig.smoothing > 10) {
-    errors.push('平滑度必须在0-10之间')
-  }
-  
-  meshConfig.isValid = errors.length === 0
-  meshConfig.errorMessage = errors.join(', ')
-}
-
 const resetConfig = () => {
-  meshConfig.type = 'triangular'
-  meshConfig.density = 50
-  meshConfig.adaptive = false
-  meshConfig.adaptiveThreshold = 0.1
-  meshConfig.edgeDetection = true
-  meshConfig.edgeSensitivity = 1.0
-  meshConfig.smoothing = 2.0
-  meshConfig.qualityOptimization = true
-  validateConfig()
+  meshConfig.value = {
+    type: 'uniform',
+    density: 50,
+    adaptive: false,
+    adaptiveThreshold: 0.5,
+    edgeDetection: false,
+    edgeSensitivity: 0.5,
+    smoothing: true,
+    qualityOptimization: true
+  }
+  ElMessage.success('配置已重置')
 }
 
 const getQualityColor = (quality: number) => {
@@ -466,8 +403,8 @@ const saveToDatabase = async () => {
       project_id: project.id,
       analysis_type: 'image_mesh',
       parameters: JSON.stringify({
-        meshType: meshConfig.type,
-        density: meshConfig.density,
+        meshType: meshConfig.value.type,
+        density: meshConfig.value.density,
         nodes: meshResult.value.statistics.totalNodes,
         elements: meshResult.value.statistics.totalElements,
         quality: meshResult.value.statistics.averageQuality
@@ -488,12 +425,12 @@ const exportMesh = async () => {
     const meshData = {
       fileName: currentFile.value.name,
       timestamp: new Date().toISOString(),
-      config: meshConfig,
+      config: meshConfig.value,
       result: meshResult.value
     }
 
     const fileName = `mesh_${currentFile.value.name.replace('.tif', '.json')}`
-    const result = await window.electronAPI.saveFile(fileName, new TextEncoder().encode(JSON.stringify(meshData, null, 2)))
+    const result = await fileOperations.saveFile(fileName, new TextEncoder().encode(JSON.stringify(meshData, null, 2)))
 
     if (result.success) {
       ElMessage.success('网格数据导出成功')

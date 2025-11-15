@@ -199,32 +199,31 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useAppStore } from '@/stores/app'
-import { ElMessage } from 'element-plus'
-import { CifParser, CifData } from '@/utils/cifParser'
-import { materialAnalyzer, AnalysisResult } from '@/utils/materialAnalyzer'
+import { useRouter } from 'vue-router'
+import { ElMessage, ElTable } from 'element-plus'
+import { CifParser } from '@/utils/cifParser'
+import { materialAnalyzer } from '@/utils/materialAnalyzer'
+import { fileOperations } from '@/platform/sdk'
 
-const router = useRouter()
 const appStore = useAppStore()
+const router = useRouter()
 
-const currentFile = ref(appStore.currentFile)
-const cifData = ref<CifData>({ atoms: [] })
-const analysisResult = ref<AnalysisResult | null>(null)
-const phaseAnalysisResult = ref<AnalysisResult | null>(null)
-const activeTab = ref('structure')
-
-// 计算配位数数据
-const coordinationData = computed(() => {
-  if (!analysisResult.value) return []
-  
-  const coordination = analysisResult.value.data.coordinationNumbers
-  return Array.from(coordination.entries()).map(([element, coordination]) => ({
-    element,
-    coordination
-  }))
+const cifData = ref({
+  header: '',
+  cell: null as any,
+  symmetry: null as any,
+  atoms: [] as any[],
+  metadata: {
+    warnings: [] as string[]
+  }
 })
+const currentFile = ref(appStore.currentFile)
+const analysisResult = ref<any>(null)
+const phaseAnalysisResult = ref<any>(null)
+const activeTab = ref('info')
+const loading = ref(false)
 
 // 计算组成数据
 const compositionData = computed(() => {
@@ -252,7 +251,7 @@ const parseCif = async () => {
   if (!currentFile.value) return
   
   try {
-    const result = await window.electronAPI.readFile(currentFile.value.path)
+    const result = await fileOperations.readFile(currentFile.value.path)
     if (result.success && result.data) {
       const cifText = new TextDecoder().decode(result.data)
       
@@ -356,7 +355,7 @@ const saveAnalysis = async () => {
     }
     
     const fileName = `analysis_${currentFile.value.name.replace('.cif', '.json')}`
-    const result = await window.electronAPI.saveFile(fileName, new TextEncoder().encode(JSON.stringify(analysisData, null, 2)))
+    const result = await fileOperations.saveFile(fileName, new TextEncoder().encode(JSON.stringify(analysisData, null, 2)))
     
     if (result.success) {
       ElMessage.success('分析结果导出成功')

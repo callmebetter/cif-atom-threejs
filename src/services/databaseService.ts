@@ -1,4 +1,5 @@
 import { ProjectRecord, AnalysisRecord, SettingsRecord, DatabaseStats } from '../types/electron'
+import { databaseOperations } from '../platform/sdk'
 
 class DatabaseService {
   // Project operations
@@ -17,7 +18,7 @@ class DatabaseService {
     }
     
     try {
-      const result = await window.electronAPI.database.createProject(projectData)
+      const result = await databaseOperations.createProject(projectData)
       if (!result.success || !result.project) {
         const errorMessage = result.error || '创建项目失败'
         console.error('Create project failed:', errorMessage)
@@ -38,7 +39,7 @@ class DatabaseService {
     }
     
     try {
-      const result = await window.electronAPI.database.getProject(id)
+      const result = await databaseOperations.getProject(id)
       if (!result.success) {
         const errorMessage = result.error || '获取项目失败'
         console.error(`Get project ${id} failed:`, errorMessage)
@@ -54,7 +55,7 @@ class DatabaseService {
 
   async getAllProjects(): Promise<ProjectRecord[]> {
     try {
-      const result = await window.electronAPI.database.getAllProjects()
+      const result = await databaseOperations.getAllProjects()
       if (!result.success) {
         const errorMessage = result.error || '获取项目列表失败'
         console.error('Get all projects failed:', errorMessage)
@@ -78,7 +79,7 @@ class DatabaseService {
     }
     
     try {
-      const result = await window.electronAPI.database.updateProject(id, updates)
+      const result = await databaseOperations.updateProject(id, updates)
       if (!result.success || !result.project) {
         const errorMessage = result.error || '更新项目失败'
         console.error(`Update project ${id} failed:`, errorMessage)
@@ -99,7 +100,7 @@ class DatabaseService {
     }
     
     try {
-      const result = await window.electronAPI.database.deleteProject(id)
+      const result = await databaseOperations.deleteProject(id)
       if (!result.success) {
         const errorMessage = result.error || '删除项目失败'
         console.error(`Delete project ${id} failed:`, errorMessage)
@@ -133,7 +134,7 @@ class DatabaseService {
     }
     
     try {
-      const result = await window.electronAPI.database.createAnalysisRecord(analysisData)
+      const result = await databaseOperations.createAnalysisRecord(analysisData)
       if (!result.success || !result.analysis) {
         const errorMessage = result.error || '创建分析记录失败'
         console.error('Create analysis record failed:', errorMessage)
@@ -154,7 +155,7 @@ class DatabaseService {
     }
     
     try {
-      const result = await window.electronAPI.database.getAnalysisRecords(projectId, analysisType)
+      const result = await databaseOperations.getAnalysisRecords(projectId, analysisType)
       if (!result.success) {
         const errorMessage = result.error || '获取分析记录失败'
         console.error('Get analysis records failed:', errorMessage)
@@ -175,7 +176,7 @@ class DatabaseService {
     }
     
     try {
-      const result = await window.electronAPI.database.deleteAnalysisRecord(id)
+      const result = await databaseOperations.deleteAnalysisRecord(id)
       if (!result.success) {
         const errorMessage = result.error || '删除分析记录失败'
         console.error(`Delete analysis record ${id} failed:`, errorMessage)
@@ -196,7 +197,7 @@ class DatabaseService {
     }
     
     try {
-      const result = await window.electronAPI.database.getSetting(key)
+      const result = await databaseOperations.getSetting(key)
       if (!result.success) {
         const errorMessage = result.error || '获取设置失败'
         console.error(`Get setting ${key} failed:`, errorMessage)
@@ -220,7 +221,7 @@ class DatabaseService {
     }
     
     try {
-      const result = await window.electronAPI.database.setSetting(key, value)
+      const result = await databaseOperations.setSetting(key, value)
       if (!result.success) {
         const errorMessage = result.error || '保存设置失败'
         console.error(`Set setting ${key} failed:`, errorMessage)
@@ -235,7 +236,7 @@ class DatabaseService {
 
   async getAllSettings(): Promise<SettingsRecord[]> {
     try {
-      const result = await window.electronAPI.database.getAllSettings()
+      const result = await databaseOperations.getAllSettings()
       if (!result.success) {
         const errorMessage = result.error || '获取所有设置失败'
         console.error('Get all settings failed:', errorMessage)
@@ -252,7 +253,7 @@ class DatabaseService {
   // Database maintenance
   async getStats(): Promise<DatabaseStats> {
     try {
-      const result = await window.electronAPI.database.getStats()
+      const result = await databaseOperations.getStats()
       if (!result.success || !result.stats) {
         const errorMessage = result.error || '获取数据库统计信息失败'
         console.error('Get database stats failed:', errorMessage)
@@ -273,7 +274,7 @@ class DatabaseService {
     }
     
     try {
-      const result = await window.electronAPI.database.backup(backupPath)
+      const result = await databaseOperations.backup(backupPath)
       if (!result.success) {
         const errorMessage = result.error || '备份数据库失败'
         console.error('Backup database failed:', errorMessage)
@@ -288,7 +289,7 @@ class DatabaseService {
 
   async vacuum(): Promise<void> {
     try {
-      const result = await window.electronAPI.database.vacuum()
+      const result = await databaseOperations.vacuum()
       if (!result.success) {
         const errorMessage = result.error || '优化数据库失败'
         console.error('Vacuum database failed:', errorMessage)
