@@ -34,7 +34,7 @@ export class StructureVisualizer {
   private atoms: AtomMesh[] = []
   private bonds: BondMesh[] = []
   private options: VisualizationOptions
-  
+
   private elementColors: Record<string, number> = {
     'H': 0xffffff, 'He': 0xd9ffff, 'Li': 0xcc80ff, 'Be': 0xc2ff00,
     'B': 0xffb5b5, 'C': 0x909090, 'N': 0x3050f8, 'O': 0xff0d0d,
@@ -42,49 +42,50 @@ export class StructureVisualizer {
     'Al': 0xbfa6a6, 'Si': 0xf0c8a0, 'P': 0xff8000, 'S': 0xffff30,
     'Cl': 0x1ff01f, 'Ar': 0x80d1e3, 'K': 0x8f40d4, 'Ca': 0x3dff00,
     'Sc': 0xe6e6e6, 'Ti': 0xbfc2c7, 'V': 0xa6a6ab, 'Cr': 0x8a99c7,
-    'Mn': 0x9c7ac7, 'Fe': 0xe06633, 'Co': 0xf090a0, 'Ni': 0x50d050,
-    'Cu': 0xc88033, 'Zn': 0x7d80b0, 'Ga': 0xc28f8f, 'Ge': 0x668f8f,
-    'As': 0xbd80e3, 'Se': 0xffa100, 'Br': 0xa62929, 'Kr': 0x5cb8d1,
+    'Mn': 0x9c7ac7, 'Fe': 0xe06633, 'Co': 0xf090a0, 'Ni': 0x50d050,        
+    'Cu': 0xc88033, 'Zn': 0x7d80b0, 'Ga': 0xc28f8f, 'Ge': 0x668f8f,        
+    'As': 0xbd80e3, 'Se': 0xffa100, 'Br': 0xa62929, 'Kr': 0x5cb8d1,        
     'Rb': 0x702eb0, 'Sr': 0x00ff00, 'Y': 0x94ffff, 'Zr': 0x94e0e0,
-    'Nb': 0x73c2c9, 'Mo': 0x54b5b5, 'Tc': 0x3b9e9e, 'Ru': 0x248f8f,
-    'Rh': 0x0a7d8c, 'Pd': 0x006985, 'Ag': 0xc0c0c0, 'Cd': 0xffd98f,
-    'In': 0xa67573, 'Sn': 0x668080, 'Sb': 0x9e63b5, 'Te': 0xd47a00,
+    'Nb': 0x73c2c9, 'Mo': 0x54b5b5, 'Tc': 0x3b9e9e, 'Ru': 0x248f8f,        
+    'Rh': 0x0a7d8c, 'Pd': 0x006985, 'Ag': 0xc0c0c0, 'Cd': 0xffd98f,        
+    'In': 0xa67573, 'Sn': 0x668080, 'Sb': 0x9e63b5, 'Te': 0xd47a00,        
     'I': 0x940094, 'Xe': 0x429eb0, 'Cs': 0x57178f, 'Ba': 0x00c900,
-    'La': 0x70d4ff, 'Ce': 0xffffc7, 'Pr': 0xd9ffc7, 'Nd': 0xc7ffc7,
-    'Pm': 0xa3ffc7, 'Sm': 0x8fffc7, 'Eu': 0x61ffc7, 'Gd': 0x45ffc7,
-    'Tb': 0x30ffc7, 'Dy': 0x1fffc7, 'Ho': 0x00ff9c, 'Er': 0x00e675,
-    'Tm': 0x00d452, 'Yb': 0x00bf38, 'Lu': 0x00ab24, 'Hf': 0x4dc2ff,
+    'La': 0x70d4ff, 'Ce': 0xffffc7, 'Pr': 0xd9ffc7, 'Nd': 0xc7ffc7,        
+    'Pm': 0xa3ffc7, 'Sm': 0x8fffc7, 'Eu': 0x61ffc7, 'Gd': 0x45ffc7,        
+    'Tb': 0x30ffc7, 'Dy': 0x1fffc7, 'Ho': 0x00ff9c, 'Er': 0x00e675,        
+    'Tm': 0x00d452, 'Yb': 0x00bf38, 'Lu': 0x00ab24, 'Hf': 0x4dc2ff,        
     'Ta': 0x4da6ff, 'W': 0x2194d6, 'Re': 0x267dab, 'Os': 0x266696,
-    'Ir': 0x175487, 'Pt': 0xd0d0e0, 'Au': 0xffd123, 'Hg': 0xb8b8d0,
-    'Tl': 0xa6544d, 'Pb': 0x575961, 'Bi': 0x9e4fb5, 'Po': 0xab5c00,
+    'Ir': 0x175487, 'Pt': 0xd0d0e0, 'Au': 0xffd123, 'Hg': 0xb8b8d0,        
+    'Tl': 0xa6544d, 'Pb': 0x575961, 'Bi': 0x9e4fb5, 'Po': 0xab5c00,        
     'At': 0x754f45, 'Rn': 0x428296, 'Fr': 0x420066, 'Ra': 0x007d00,
     'Ac': 0x70abfa, 'Th': 0x00baff, 'Pa': 0x00a1ff, 'U': 0x008fff,
-    'Np': 0x0080ff, 'Pu': 0x006bff, 'Am': 0x545cf2, 'Cm': 0x785ce3,
-    'Bk': 0x8a4fe3, 'Cf': 0xa136d4, 'Es': 0xb31fd4, 'Fm': 0xb31fba,
-    'Md': 0xb30da6, 'No': 0xbd0d87, 'Lr': 0xc70066, 'Rf': 0xcc0059,
-    'Db': 0xd1004f, 'Sg': 0xd90045, 'Bh': 0xe00038, 'Hs': 0xe6002e,
-    'Mt': 0xeb0026, 'Ds': 0x000000, 'Rg': 0x000000, 'Cn': 0x000000,
+    'Np': 0x0080ff, 'Pu': 0x006bff, 'Am': 0x545cf2, 'Cm': 0x785ce3,        
+    'Bk': 0x8a4fe3, 'Cf': 0xa136d4, 'Es': 0xb31fd4, 'Fm': 0xb31fba,        
+    'Md': 0xb30da6, 'No': 0xbd0d87, 'Lr': 0xc70066, 'Rf': 0xcc0059,        
+    'Db': 0xd1004f, 'Sg': 0xd90045, 'Bh': 0xe00038, 'Hs': 0xe6002e,        
+    'Mt': 0xeb0026, 'Ds': 0x000000, 'Rg': 0x000000, 'Cn': 0x000000,        
     'Fl': 0x000000, 'Lv': 0x000000, 'Ts': 0x000000, 'Og': 0x000000
   }
 
   private elementRadii: Record<string, number> = {
-    'H': 0.31, 'He': 0.28, 'Li': 1.28, 'Be': 0.96, 'B': 0.84, 'C': 0.76,
-    'N': 0.71, 'O': 0.66, 'F': 0.57, 'Ne': 0.58, 'Na': 1.66, 'Mg': 1.41,
-    'Al': 1.21, 'Si': 1.11, 'P': 1.07, 'S': 1.05, 'Cl': 1.02, 'Ar': 1.06,
-    'K': 2.03, 'Ca': 1.76, 'Sc': 1.70, 'Ti': 1.60, 'V': 1.53, 'Cr': 1.39,
+    'H': 0.31, 'He': 0.28, 'Li': 1.28, 'Be': 0.96, 'B': 0.84, 'C': 0.76,   
+    'N': 0.71, 'O': 0.66, 'F': 0.57, 'Ne': 0.58, 'Na': 1.66, 'Mg': 1.41,   
+    'Al': 1.21, 'Si': 1.11, 'P': 1.07, 'S': 1.05, 'Cl': 1.02, 'Ar': 1.06,  
+    'K': 2.03, 'Ca': 1.76, 'Sc': 1.70, 'Ti': 1.60, 'V': 1.53, 'Cr': 1.39,  
     'Mn': 1.50, 'Fe': 1.42, 'Co': 1.38, 'Ni': 1.24, 'Cu': 1.32, 'Zn': 1.22,
     'Ga': 1.22, 'Ge': 1.20, 'As': 1.19, 'Se': 1.16, 'Br': 1.14, 'Kr': 1.17,
-    'Rb': 2.20, 'Sr': 1.95, 'Y': 1.90, 'Zr': 1.75, 'Nb': 1.64, 'Mo': 1.54,
+    'Rb': 2.20, 'Sr': 1.95, 'Y': 1.90, 'Zr': 1.75, 'Nb': 1.64, 'Mo': 1.54, 
     'Tc': 1.47, 'Ru': 1.46, 'Rh': 1.42, 'Pd': 1.39, 'Ag': 1.45, 'Cd': 1.44,
-    'In': 1.42, 'Sn': 1.39, 'Sb': 1.39, 'Te': 1.38, 'I': 1.39, 'Xe': 1.40,
+    'In': 1.42, 'Sn': 1.39, 'Sb': 1.39, 'Te': 1.38, 'I': 1.39, 'Xe': 1.40, 
     'Cs': 2.44, 'Ba': 2.15, 'La': 2.07, 'Ce': 2.04, 'Pr': 2.03, 'Nd': 2.01,
     'Pm': 1.99, 'Sm': 1.98, 'Eu': 1.98, 'Gd': 1.96, 'Tb': 1.94, 'Dy': 1.92,
     'Ho': 1.92, 'Er': 1.89, 'Tm': 1.90, 'Yb': 1.87, 'Lu': 1.87, 'Hf': 1.75,
     'Ta': 1.70, 'W': 1.62, 'Re': 1.51, 'Os': 1.44, 'Ir': 1.41, 'Pt': 1.36,
     'Au': 1.36, 'Hg': 1.32, 'Tl': 1.45, 'Pb': 1.46, 'Bi': 1.48, 'Po': 1.40,
     'At': 1.50, 'Rn': 1.50, 'Fr': 2.60, 'Ra': 2.30, 'Ac': 2.15, 'Th': 2.06,
-    'Pa': 2.00, 'U': 1.96, 'Np': 1.90, 'Pu': 1.84, 'Am': 1.80, 'Cm': 1.69
+    'Pa': 2.00, 'U': 1.96, 'Np': 1.90, 'Pu': 1.84, 'Am': 1.80, 'Cm': 1.69  
   }
+  private boundHandleResize: (() => void) | null = null
 
   constructor(container: HTMLElement, options: VisualizationOptions) {
     this.container = container
@@ -124,7 +125,8 @@ export class StructureVisualizer {
     this.animate()
 
     // 处理窗口大小变化
-    window.addEventListener('resize', this.handleResize.bind(this))
+    this.boundHandleResize = this.handleResize.bind(this)
+    window.addEventListener('resize', this.boundHandleResize)
   }
 
   private setupLights() {
@@ -452,6 +454,8 @@ export class StructureVisualizer {
       this.container.removeChild(this.renderer.domElement)
     }
     
-    window.removeEventListener('resize', this.handleResize.bind(this))
+    if (this.boundHandleResize) {
+      window.removeEventListener('resize', this.boundHandleResize)
+    }
   }
 }

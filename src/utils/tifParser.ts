@@ -106,53 +106,62 @@ export class TifParser {
     arrayBuffer: ArrayBuffer, 
     page: any
   ): Promise<ArrayBuffer> {
+    // This method extracts compressed strips from the TIFF page and attempts
+    // to decompress them using `pako`. It returns a combined ArrayBuffer of
+    // the decompressed strips when successful. If no strips are found or all
+    // decompression attempts fail, the original buffer is returned so that
+    // upstream code can decide how to proceed.
     try {
-      // For deflate compressed TIFFs, we need to extract and decompress the strips
-      const dataView = new DataView(arrayBuffer)
       const strips: Uint8Array[] = []
-      
-      // Extract compressed strips
-      if (page.stripOffsets && page.stripByteCounts) {
-        for (let i = 0; i < page.stripOffsets.length; i++) {
-          const offset = page.stripOffsets[i]
-          const byteCount = page.stripByteCounts[i]
-          
-          const compressedData = new Uint8Array(
-            arrayBuffer,
-            offset,
-            byteCount
-          )
-          
+
+      // Defensive access: ensure stripOffsets/stripByteCounts are arrays
+      const offsets = Array.isArray(page?.stripOffsets) ? page.stripOffsets : []
+      const counts = Array.isArray(page?.stripByteCounts) ? page.stripByteCounts : []
+
+      for (let i = 0; i < offsets.length; i++) {
+        const offset = offsets[i]
+        const byteCount = counts[i] ?? 0
+
+        if (typeof offset !== 'number' || byteCount <= 0) continue
+
+        const compressedData = new Uint8Array(arrayBuffer, offset, byteCount)
+
+        // Try inflate, then inflateRaw, fallback to original compressed chunk
+        try {
+          const decompressed = pako.inflate(compressedData)
+          strips.push(decompressed)
+        } catch (inflateError) {
           try {
-            // Try to decompress with pako
-            const decompressed = pako.inflate(compressedData)
+            const decompressed = pako.inflateRaw(compressedData)
             strips.push(decompressed)
-          } catch (inflateError) {
-            // If inflate fails, try raw
-            try {
-              const decompressed = pako.inflateRaw(compressedData)
-              strips.push(decompressed)
-            } catch (rawError) {
-              console.warn('Decompression failed, using original data:', rawError)
-              strips.push(compressedData)
-            }
+          } catch (rawError) {
+            // If both decompression attempts fail, keep the original compressed
+            // chunk so that callers can make a decision (we avoid throwing
+            // here because some TIFFs use alternative packing that may be
+            // handled later by UTIF or other logic).
+            console.warn('Strip decompression failed; keeping compressed chunk', rawError)
+            strips.push(compressedData)
           }
         }
       }
-      
-      // Combine all strips
-      const totalLength = strips.reduce((sum, strip) => sum + strip.length, 0)
-      const combinedData = new Uint8Array(totalLength)
-      let offset = 0
-      
-      for (const strip of strips) {
-        combinedData.set(strip, offset)
-        offset += strip.length
+
+      if (strips.length === 0) {
+        // Nothing decompressed — return original buffer
+        return arrayBuffer
       }
-      
-      return combinedData.buffer
+
+      // Combine all strips into a single contiguous buffer
+      const totalLength = strips.reduce((sum, strip) => sum + strip.length, 0)
+      const combined = new Uint8Array(totalLength)
+      let destOff = 0
+      for (const s of strips) {
+        combined.set(s, destOff)
+        destOff += s.length
+      }
+
+      return combined.buffer
     } catch (error) {
-      console.warn('Deflate decompression failed, using original buffer:', error)
+      console.warn('handleDeflateCompression failed, returning original buffer', error)
       return arrayBuffer
     }
   }
@@ -304,4 +313,6 @@ export class TifParser {
       spaceSaved
     }
   }
+
+  
 }

@@ -9,7 +9,7 @@ export interface ReportData {
 export interface ReportSection {
   title: string
   type: 'text' | 'table' | 'chart' | 'image' | 'summary'
-  content: any
+  content: unknown
 }
 
 export interface ExportOptions {

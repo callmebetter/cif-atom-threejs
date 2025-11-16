@@ -1,8 +1,8 @@
-import { CifData } from './cifParser'
+import { CifData, CifAtom, CifCellParameters } from './cifParser'
 
 export interface AnalysisResult {
   type: string
-  data: any
+  data: unknown
   timestamp: Date
   success: boolean
   error?: string
@@ -190,7 +190,8 @@ class MaterialAnalyzer {
     const z = this.getZValue(cifData) // Number of formula units per cell
     
     // Convert Å³ to cm³ and calculate density (g/cm³)
-    const volumeCm3 = volume * 1e-24
+    // Volume in cm³ = volume in Å³ * 10^(-24) 
+    const volumeCm3 = volume / 1e24
     const avogadro = 6.022e23
     
     return (molecularWeight * z) / (avogadro * volumeCm3)
@@ -437,7 +438,7 @@ class MaterialAnalyzer {
   /**
    * 计算两个原子之间的距离
    */
-  private calculateDistance(atom1: any, atom2: any, cell: any): number {
+  private calculateDistance(atom1: CifAtom, atom2: CifAtom, cell: CifCellParameters): number {
     const dx = atom1.x - atom2.x
     const dy = atom1.y - atom2.y
     const dz = atom1.z - atom2.z
@@ -521,7 +522,7 @@ class MaterialAnalyzer {
     const max = values[values.length - 1]
     
     // Calculate histogram
-    const histogram = new Array(256).fill(0)
+    const histogram = Array.from({ length: 256 }, () => 0)
     for (const value of values) {
       histogram[Math.floor(value)]++
     }

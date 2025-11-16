@@ -25,19 +25,21 @@ export interface MeshConfig {
   qualityOptimization: boolean
 }
 
+export interface MeshStatistics {
+  totalNodes: number
+  totalElements: number
+  boundaryNodes: number
+  averageQuality: number
+  minQuality: number
+  maxQuality: number
+  generationTime: number
+}
+
 export interface MeshResult {
   success: boolean
   nodes: MeshNode[]
   elements: MeshElement[]
-  statistics: {
-    totalNodes: number
-    totalElements: number
-    boundaryNodes: number
-    averageQuality: number
-    minQuality: number
-    maxQuality: number
-    processingTime: number
-  }
+  statistics: MeshStatistics
   config: MeshConfig
   error?: string
 }
@@ -86,7 +88,7 @@ export class ImageMeshGenerator {
           averageQuality: 0,
           minQuality: 0,
           maxQuality: 0,
-          processingTime: performance.now() - startTime
+          generationTime: performance.now() - startTime
         },
         config,
         error: error instanceof Error ? error.message : String(error)
@@ -169,7 +171,7 @@ export class ImageMeshGenerator {
   private detectBoundaries(image: Float32Array, config: MeshConfig): boolean[] {
     const width = Math.sqrt(image.length)
     const height = width
-    const boundaries = new Array(image.length).fill(false)
+    const boundaries = Array.from({ length: image.length }, () => false)
     
     if (!config.edgeDetection) {
       return boundaries
@@ -555,7 +557,7 @@ export class ImageMeshGenerator {
     }
   }
 
-  private calculateStatistics(nodes: MeshNode[], elements: MeshElement[], startTime: number): any {
+  private calculateStatistics(nodes: MeshNode[], elements: MeshElement[], startTime: number): MeshStatistics {
     const qualities = elements.map(e => e.quality)
     const boundaryNodes = nodes.filter(n => n.boundary).length
     
@@ -566,7 +568,7 @@ export class ImageMeshGenerator {
       averageQuality: qualities.reduce((sum, q) => sum + q, 0) / qualities.length,
       minQuality: Math.min(...qualities),
       maxQuality: Math.max(...qualities),
-      processingTime: performance.now() - startTime
+      generationTime: Date.now() - startTime
     }
   }
 }
