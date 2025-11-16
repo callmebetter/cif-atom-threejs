@@ -212,16 +212,16 @@ const router = useRouter()
 
 const cifData = ref({
   header: '',
-  cell: null as any,
-  symmetry: null as any,
-  atoms: [] as any[],
+  cell: null as unknown,
+  symmetry: null as unknown,
+  atoms: [] as unknown[],
   metadata: {
     warnings: [] as string[]
   }
 })
 const currentFile = ref(appStore.currentFile)
-const analysisResult = ref<any>(null)
-const phaseAnalysisResult = ref<any>(null)
+const analysisResult = ref<unknown>(null)
+const phaseAnalysisResult = ref<unknown>(null)
 const activeTab = ref('info')
 const loading = ref(false)
 

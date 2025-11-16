@@ -15,23 +15,23 @@ export const safeInvoke = async <C extends Channel>(
 
 // Convenience methods for common operations
 export const fileOperations = {
-  selectFile: (options: any) => safeInvoke('select-file', options),
+  selectFile: (options: unknown) => safeInvoke('select-file', options),
   readFile: (filePath: string) => safeInvoke('read-file', filePath),
-  saveFile: (fileName: string, data: any) => safeInvoke('save-file', [fileName, data]),
+  saveFile: (fileName: string, data: unknown) => safeInvoke('save-file', [fileName, data]),
   initAppData: () => safeInvoke('init-app-data', void 0),
   getPlatformInfo: () => safeInvoke('get-platform-info', void 0),
 };
 
 export const databaseOperations = {
   // Project operations
-  createProject: (project: any) => safeInvoke('db:create-project', project),
+  createProject: (project: unknown) => safeInvoke('db:create-project', project),
   getProject: (id: number) => safeInvoke('db:get-project', id),
   getAllProjects: () => safeInvoke('db:get-all-projects', void 0),
-  updateProject: (id: number, updates: any) => safeInvoke('db:update-project', [id, updates]),
+  updateProject: (id: number, updates: unknown) => safeInvoke('db:update-project', [id, updates]),
   deleteProject: (id: number) => safeInvoke('db:delete-project', id),
   
   // Analysis record operations
-  createAnalysisRecord: (analysis: any) => safeInvoke('db:create-analysis-record', analysis),
+  createAnalysisRecord: (analysis: unknown) => safeInvoke('db:create-analysis-record', analysis),
   getAnalysisRecords: (projectId?: number, analysisType?: string) => 
     safeInvoke('db:get-analysis-records', [projectId, analysisType]),
   deleteAnalysisRecord: (id: number) => safeInvoke('db:delete-analysis-record', id),

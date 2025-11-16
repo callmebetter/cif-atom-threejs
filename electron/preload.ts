@@ -1,16 +1,16 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { ElectronAPI } from '../src/types/electron'
 
+// Updated electronAPI with unified invoke method
 const electronAPI: ElectronAPI = {
-  // File operations
+  // Unified invoke method
+  invoke: (channel, args) => ipcRenderer.invoke(channel, args),
+  
+  // Backward compatibility methods
   selectFile: (options) => ipcRenderer.invoke('select-file', options),
   readFile: (filePath) => ipcRenderer.invoke('read-file', filePath),
   saveFile: (fileName, data) => ipcRenderer.invoke('save-file', fileName, data),
-
-  // App data management
   initAppData: () => ipcRenderer.invoke('init-app-data'),
-
-  // System info
   getPlatformInfo: () => ipcRenderer.invoke('get-platform-info'),
 
   // Database operations

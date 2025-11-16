@@ -35,7 +35,7 @@ export const useAppStore = defineStore('app', () => {
   const analysisRecords = ref<AnalysisRecord[]>([])
   const settings = ref<SettingsRecord[]>([])
   const databaseStats = ref<DatabaseStats | null>(null)
-  const cifData = ref<any>(null)
+  const cifData = ref<unknown>(null)
 
   // Actions
   const setStatus = (status: string) => {
