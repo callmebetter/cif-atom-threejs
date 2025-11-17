@@ -14,7 +14,7 @@ export default defineConfig({
         // Run oxlint during build
         const { execSync } = require('child_process')
         try {
-          execSync('npx oxlint --config oxlint.config.js', { stdio: 'inherit' })
+          execSync('npx oxlint --config oxlint.config.json', { stdio: 'inherit' })
         } catch (error) {
           console.error('Linting failed:', error.message)
           // Don't fail the build, just warn
@@ -34,6 +34,10 @@ export default defineConfig({
         warn(warning)
       }
     }
+  },
+  optimizeDeps: {
+    // Disable dependency optimization
+    disabled: true
   },
   resolve: {
     alias: {

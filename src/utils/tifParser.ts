@@ -40,7 +40,7 @@ export class TifParser {
       let compressedSize = originalSize
 
       // Parse the TIFF file
-      let ifds = UTIF.decode(processedBuffer)
+      let ifds = UTIF.decode([processedBuffer])
       
       if (ifds.length === 0) {
         throw new Error('No TIFF pages found')
@@ -60,7 +60,7 @@ export class TifParser {
         }
         
         // Re-parse after decompression
-        ifds = UTIF.decode(processedBuffer)
+        ifds = UTIF.decode([processedBuffer])
         if (ifds.length === 0) {
           throw new Error('No TIFF pages found after decompression')
         }
@@ -84,11 +84,11 @@ export class TifParser {
       }
       
       // Decode the image
-      UTIF.decodeImage(processedBuffer, page)
-      
+      UTIF.decodeImage(processedBuffer)
+
       // Get RGBA data
-      const rgba = UTIF.toRGBA8(page)
-      
+      const rgba = UTIF.toRGBA(page)
+
       // Create ImageData
       const imageData = new ImageData(
         new Uint8ClampedArray(rgba),
@@ -202,7 +202,7 @@ export class TifParser {
   // Compress image data using pako
   static compressImageData(imageData: Uint8Array, level: number = 6): Uint8Array {
     try {
-      return pako.deflate(imageData, { level })
+      return pako.deflate(imageData, { level: level as any })
     } catch (error) {
       throw new Error(`Image compression failed: ${error}`)
     }
@@ -248,12 +248,12 @@ export class TifParser {
   ): Promise<ArrayBuffer> {
     try {
       // Convert ImageData to raw data
-      const rawData = new Uint8Array(imageData.data)
+      const rawData = new Uint8Array(imageData.data.buffer as ArrayBuffer)
       
       // Compress the data if needed
-      let processedData = rawData
+      let processedData = rawData as Uint8Array<ArrayBuffer>
       if (compression !== this.COMPRESSION_NONE) {
-        processedData = this.compressImageData(rawData)
+        processedData = this.compressImageData(rawData) as Uint8Array<ArrayBuffer>
       }
 
       // Create a simple TIF structure (this is a simplified implementation)

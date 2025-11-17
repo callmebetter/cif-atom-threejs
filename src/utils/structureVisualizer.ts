@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { CifData } from './cifParser'
 
 export interface VisualizationOptions {
@@ -24,10 +24,10 @@ export interface BondMesh {
 }
 
 export class StructureVisualizer {
-  private scene: THREE.Scene
-  private camera: THREE.PerspectiveCamera
-  private renderer: THREE.WebGLRenderer
-  private controls: OrbitControls
+  private scene!: THREE.Scene
+  private camera!: THREE.PerspectiveCamera
+  private renderer!: THREE.WebGLRenderer
+  private controls!: OrbitControls
   private container: HTMLElement
   private animationId: number | null = null
   
@@ -205,7 +205,7 @@ export class StructureVisualizer {
   }
 
   private createAtoms(atoms: any[]) {
-    atoms.forEach((atom, index) => {
+    atoms.forEach((atom) => {
       if (!this.options.visibleElements.includes(atom.element)) {
         return
       }

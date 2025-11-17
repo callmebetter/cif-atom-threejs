@@ -203,7 +203,7 @@ class DatabaseService {
         console.error(`Get setting ${key} failed:`, errorMessage)
         throw new Error(errorMessage)
       }
-      return result.value || null
+      return result.data || null
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '获取设置时发生未知错误'
       console.error(`Get setting ${key} error:`, errorMessage)

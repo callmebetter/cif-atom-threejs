@@ -250,7 +250,6 @@ export class ImageMeshGenerator {
 
   private shouldRefine(image: Float32Array, x: number, y: number, threshold: number): boolean {
     const width = Math.sqrt(image.length)
-    const idx = Math.floor(y) * width + Math.floor(x)
     
     // 基于梯度判断是否需要细化
     const gradient = this.calculateGradient(image, x, y, width)
@@ -274,7 +273,7 @@ export class ImageMeshGenerator {
     return x <= 1 || x >= width - 2 || y <= 1 || y >= height - 2
   }
 
-  private ensureBoundaryNodes(nodes: MeshNode[], width: number, height: number, boundaries: boolean[], startId: number): void {
+  private ensureBoundaryNodes(nodes: MeshNode[], width: number, height: number, _boundaries: boolean[], startId: number): void {
     let nodeId = startId
     
     // 添加边界节点
@@ -387,7 +386,7 @@ export class ImageMeshGenerator {
     }
   }
 
-  private generateMixedElements(nodes: MeshNode[], elements: MeshElement[], startId: number, boundaries: boolean[]): void {
+  private generateMixedElements(nodes: MeshNode[], elements: MeshElement[], startId: number, _boundaries: boolean[]): void {
     // 在边界使用四边形，内部使用三角形
     const boundaryNodes = nodes.filter(n => n.boundary)
     const interiorNodes = nodes.filter(n => !n.boundary)
@@ -487,7 +486,7 @@ export class ImageMeshGenerator {
     return Math.sqrt(Math.pow(n2.x - n1.x, 2) + Math.pow(n2.y - n1.y, 2))
   }
 
-  private optimizeMesh(nodes: MeshNode[], elements: MeshElement[], config: MeshConfig): void {
+  private optimizeMesh(nodes: MeshNode[], elements: MeshElement[], _config: MeshConfig): void {
     // 简化的网格优化
     for (let iteration = 0; iteration < 5; iteration++) {
       this.smoothNodes(nodes, elements)
@@ -547,7 +546,7 @@ export class ImageMeshGenerator {
     return neighbors
   }
 
-  private removePoorElements(nodes: MeshNode[], elements: MeshElement[]): void {
+  private removePoorElements(_nodes: MeshNode[], elements: MeshElement[]): void {
     // 移除质量差的单元
     const threshold = 0.3
     for (let i = elements.length - 1; i >= 0; i--) {

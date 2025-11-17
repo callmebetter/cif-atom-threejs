@@ -82,14 +82,15 @@ function startDevelopment() {
   // Start Vite dev server
   const viteProcess = spawn('npm', ['run', 'dev:vite'], {
     stdio: 'pipe',
-    shell: true
+    shell: process.platform === 'win32'
   });
   
   viteProcess.stdout.on('data', (data) => {
       const output = data.toString();
       
-      // Extract port from Vite output - more flexible regex
-      const portMatch = output.match(/Local:\s*http:\/\/localhost:(\d+)/) || 
+      // Extract port from Vite output - more flexible regex to catch actual working port
+      const portMatch = output.match(/Local:\s*http:\/\/localhost:(\d+)/) ||
+                         output.match(/Network:\s*http:\/\/[^:]+:(\d+)/) ||
                          output.match(/localhost:(\d+)/);
       if (portMatch && !vitePort) {
         vitePort = portMatch[1];
@@ -130,7 +131,7 @@ function startElectron(vitePort, viteProcess) {
   
   const electronProcess = spawn('npm', ['run', 'dev:electron'], {
     stdio: 'pipe',
-    shell: true,
+    shell: process.platform === 'win32',
     env
   });
   
@@ -187,7 +188,7 @@ function startElectronOnly() {
   // First, start Vite to get the port
   const viteProcess = spawn('npm', ['run', 'dev:vite'], {
     stdio: 'pipe',
-    shell: true
+    shell: process.platform === 'win32'
   });
   
   let vitePort = null;
@@ -195,8 +196,9 @@ function startElectronOnly() {
   viteProcess.stdout.on('data', (data) => {
     const output = data.toString();
     
-    // Extract port from Vite output - more flexible regex
-    const portMatch = output.match(/Local:\s*http:\/\/localhost:(\d+)/) || 
+    // Extract port from Vite output - more flexible regex to catch actual working port
+    const portMatch = output.match(/Local:\s*http:\/\/localhost:(\d+)/) ||
+                       output.match(/Network:\s*http:\/\/[^:]+:(\d+)/) ||
                        output.match(/localhost:(\d+)/);
     if (portMatch && !vitePort) {
       vitePort = portMatch[1];
@@ -206,7 +208,7 @@ function startElectronOnly() {
       const env = { ...process.env, VITE_PORT: vitePort };
       const electronProcess = spawn('npx', ['electron', '.'], {
         stdio: 'pipe',
-        shell: true,
+        shell: process.platform === 'win32',
         env
       });
       
@@ -249,7 +251,7 @@ function startElectronOnly() {
       log('⚠️  Could not detect Vite port, using default...', 'yellow');
       const electronProcess = spawn('npx', ['electron', '.'], {
         stdio: 'pipe',
-        shell: true
+        shell: process.platform === 'win32'
       });
       
       electronProcess.stdout.on('data', (data) => {

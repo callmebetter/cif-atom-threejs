@@ -161,7 +161,7 @@ class MaterialAnalyzer {
    * 计算晶胞体积
    */
   private calculateCellVolume(cifData: CifData): number {
-    const { a, b, c, alpha, beta, gamma } = cifData.cell
+    const { a, b, c, alpha, beta, gamma } = cifData.cell_parameters || { a: 0, b: 0, c: 0, alpha: 0, beta: 0, gamma: 0 }
     
     // Convert angles to radians
     const alphaRad = (alpha * Math.PI) / 180
@@ -219,8 +219,9 @@ class MaterialAnalyzer {
    */
   private getZValue(cifData: CifData): number {
     // Try to get Z from CIF data
-    if (cifData.symmetry && cifData.symmetry.z) {
-      return cifData.symmetry.z
+    if (cifData.symmetry && cifData.symmetry.symmetry_space_group_name_h_m) {
+      // Return the number of symmetry operations if available
+      return cifData.symmetry.symmetry_equiv_pos_as_xyz?.length || 1
     }
     
     // If not available, estimate based on the number of atoms
@@ -267,7 +268,7 @@ class MaterialAnalyzer {
         const atom1 = cifData.atoms[i]
         const atom2 = cifData.atoms[j]
         
-        const distance = this.calculateDistance(atom1, atom2, cifData.cell)
+        const distance = this.calculateDistance(atom1, atom2, cifData.cell_parameters || { a: 0, b: 0, c: 0, alpha: 0, beta: 0, gamma: 0 })
         const maxBondDistance = this.getMaxBondDistance(atom1.element, atom2.element)
         
         if (distance <= maxBondDistance) {
@@ -317,9 +318,10 @@ class MaterialAnalyzer {
           const atom2 = cifData.atoms[j] // Central atom
           const atom3 = cifData.atoms[k]
           
-          const distance1 = this.calculateDistance(atom1, atom2, cifData.cell)
-          const distance2 = this.calculateDistance(atom2, atom3, cifData.cell)
-          const distance3 = this.calculateDistance(atom1, atom3, cifData.cell)
+          const cellParams = cifData.cell_parameters || { a: 0, b: 0, c: 0, alpha: 0, beta: 0, gamma: 0 }
+          const distance1 = this.calculateDistance(atom1, atom2, cellParams)
+          const distance2 = this.calculateDistance(atom2, atom3, cellParams)
+          const distance3 = this.calculateDistance(atom1, atom3, cellParams)
           
           const maxBondDistance1 = this.getMaxBondDistance(atom1.element, atom2.element)
           const maxBondDistance2 = this.getMaxBondDistance(atom2.element, atom3.element)
@@ -362,7 +364,7 @@ class MaterialAnalyzer {
    * 分析对称性
    */
   private analyzeSymmetry(cifData: CifData): CrystalStructureAnalysis['symmetry'] {
-    const cell = cifData.cell
+    const cell = cifData.cell_parameters || { a: 0, b: 0, c: 0, alpha: 0, beta: 0, gamma: 0 }
     let crystalSystem = 'triclinic'
     let pointGroup = '1'
     
@@ -404,7 +406,7 @@ class MaterialAnalyzer {
     
     return {
       crystalSystem,
-      spaceGroup: cifData.symmetry?.spaceGroup || 'P1',
+      spaceGroup: cifData.symmetry?.space_group_name_hm || 'P1',
       pointGroup
     }
   }
@@ -439,15 +441,6 @@ class MaterialAnalyzer {
    * 计算两个原子之间的距离
    */
   private calculateDistance(atom1: CifAtom, atom2: CifAtom, cell: CifCellParameters): number {
-    const dx = atom1.x - atom2.x
-    const dy = atom1.y - atom2.y
-    const dz = atom1.z - atom2.z
-    
-    // Apply periodic boundary conditions
-    const dxPbc = dx - Math.round(dx)
-    const dyPbc = dy - Math.round(dy)
-    const dzPbc = dz - Math.round(dz)
-    
     // Convert to Cartesian coordinates
     const x1 = atom1.x * cell.a + atom1.y * cell.b * Math.cos(cell.gamma * Math.PI / 180) + atom1.z * cell.c * Math.cos(cell.beta * Math.PI / 180)
     const y1 = atom1.y * cell.b * Math.sin(cell.gamma * Math.PI / 180) + atom1.z * cell.c * (Math.cos(cell.alpha * Math.PI / 180) - Math.cos(cell.beta * Math.PI / 180) * Math.cos(cell.gamma * Math.PI / 180)) / Math.sin(cell.gamma * Math.PI / 180)
@@ -662,20 +655,19 @@ class MaterialAnalyzer {
   private identifyPhases(cifData: CifData): PhaseAnalysis['phases'] {
     // Simplified phase identification
     // In practice, you would use databases and pattern matching
-    
-    const composition = this.getComposition(cifData)
+
     const symmetry = this.analyzeSymmetry(cifData)
     
     return [{
       name: `${symmetry.crystalSystem} phase`,
       fraction: 1.0,
       latticeParameters: {
-        a: cifData.cell.a,
-        b: cifData.cell.b,
-        c: cifData.cell.c,
-        alpha: cifData.cell.alpha,
-        beta: cifData.cell.beta,
-        gamma: cifData.cell.gamma
+        a: cifData.cell_parameters?.a || 0,
+        b: cifData.cell_parameters?.b || 0,
+        c: cifData.cell_parameters?.c || 0,
+        alpha: cifData.cell_parameters?.alpha || 0,
+        beta: cifData.cell_parameters?.beta || 0,
+        gamma: cifData.cell_parameters?.gamma || 0
       },
       spaceGroup: symmetry.spaceGroup
     }]
@@ -684,7 +676,7 @@ class MaterialAnalyzer {
   /**
    * 生成相图
    */
-  private generatePhaseDiagram(cifData: CifData): string {
+  private generatePhaseDiagram(_cifData: CifData): string {
     // Simplified phase diagram generation
     // In practice, you would use thermodynamic databases
     

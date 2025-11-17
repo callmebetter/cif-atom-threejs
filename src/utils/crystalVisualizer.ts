@@ -12,9 +12,9 @@ export interface VisualizationOptions {
 }
 
 export class CrystalStructureVisualizer {
-  private scene: THREE.Scene
-  private camera: THREE.PerspectiveCamera
-  private renderer: THREE.WebGLRenderer
+  private scene!: THREE.Scene
+  private camera!: THREE.PerspectiveCamera
+  private renderer!: THREE.WebGLRenderer
   private controls: any
   private container: HTMLElement
   private atoms: THREE.Group[] = []
@@ -212,7 +212,6 @@ export class CrystalStructureVisualizer {
     const cylinder = new THREE.Mesh(geometry, material)
     
     // 设置圆柱体的位置和方向
-    const direction = new THREE.Vector3().subVectors(end, start).normalize()
     const position = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5)
     
     cylinder.position.copy(position)
@@ -224,7 +223,7 @@ export class CrystalStructureVisualizer {
   }
 
   private createLabels(atoms: CifAtom[], center: THREE.Vector3, scale: number) {
-    atoms.forEach((atom, index) => {
+    atoms.forEach((atom) => {
       const canvas = document.createElement('canvas')
       const context = canvas.getContext('2d')!
       canvas.width = 64
@@ -256,7 +255,7 @@ export class CrystalStructureVisualizer {
   }
 
   private createUnitCell(cellParams: any, center: THREE.Vector3, scale: number) {
-    const { a, b, c, alpha, beta, gamma } = cellParams
+    const { a, b, c } = cellParams
     
     // 创建晶胞的8个顶点
     const vertices = [

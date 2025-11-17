@@ -365,3 +365,6 @@ export class CifParser {
     return radii[element] || 1.0
   }
 }
+
+// Export a default instance for convenience
+export const cifParser = new CifParser()
