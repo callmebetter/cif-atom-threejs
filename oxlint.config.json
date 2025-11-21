@@ -19,6 +19,7 @@
     "node": true
   },
   "globals": [],
+  "include": [ "src/**/*.{ts,js,vue}"],
   "ignore": [
     "dist/**",
     "dist-electron/**",

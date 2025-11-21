@@ -2,9 +2,11 @@
   "name": "crystallography-image-tool",
   "version": "1.0.0",
   "description": "晶体学与微观图像科研辅助工具",
-  "main": "dist/main.js",
+  "main": "out/main/index.js",
+  "type": "module",
   "scripts": {
-    "dev": "node scripts/dev.js start",
+    "dev": "electron-vite dev",
+    "dev:old": "node scripts/dev.js start",
     "dev:vite": "vite",
     "dev:electron": "node scripts/dev.js electron",
     "dev:check-quick": "node scripts/error-detector.js",
@@ -17,14 +19,30 @@
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac",
     "build:linux": "electron-builder --linux",
+    "rebuild:native": "electron-rebuild --force",
+    "rebuild:native:windows": "set GYP_MSVS_VERSION=2019 && pnpm dlx electron-rebuild --force",
+    "rebuild:sqlite3": "node scripts/rebuild-sqlite3.js",
+    "repair:electron": "node scripts/repair-electron.js",
+    "check:electron": "node scripts/check-electron.js",
+    "sqlite:install": "npm install better-sqlite3 sqlite3 --build-from-source=false",
+    "sqlite:check": "node -e \"try{require('better-sqlite3');console.log('✅ better-sqlite3 OK')}catch(e){console.log('❌ better-sqlite3:',e.message)};try{require('sqlite3');console.log('✅ sqlite3 OK')}catch(e){console.log('❌ sqlite3:',e.message)}\"",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
-    "postinstall": "electron-builder install-app-deps",
     "dev:setup": "node scripts/dev.js setup",
     "dev:check": "node scripts/dev.js check",
-    "test": "echo \"No tests specified\" && exit 0",
-    "lint": "echo \"No linting specified\" && exit 0",
-    "type-check": "vue-tsc --noEmit"
+    "install:safe": "node scripts/safe-install.js",
+    "install:full": "node scripts/safe-install.js && npm run rebuild:native",
+    "setup:project": "npm run install:safe && npm run dev:setup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:ui": "vitest --ui",
+    "lint": "oxlint --config oxlint.config.json --fix",
+    "lint:check": "oxlint --config oxlint.config.json",
+    "lint:quiet": "oxlint --config oxlint.config.json --quiet",
+    "type-check": "vue-tsc --noEmit",
+    "sqlite:rebuild": "npm rebuild better-sqlite3 sqlite3",
+    "clean": "node scripts/clean.js"
   },
   "keywords": [
     "crystallography",
@@ -38,15 +56,20 @@
   "devDependencies": {
     "@electron/rebuild": "^4.0.1",
     "@types/node": "^20.10.0",
-    "@vitejs/plugin-vue": "^4.5.0",
+    "@vitejs/plugin-vue": "^6.0.1",
+    "@vitest/coverage-v8": "^1.0.4",
+    "@vitest/ui": "^1.0.4",
+    "@vue/test-utils": "^2.4.3",
     "concurrently": "^8.2.2",
-    "electron": "^28.0.0",
+    "electron": "^39.2.1",
     "electron-builder": "^24.8.1",
-    "electron-rebuild": "^3.2.9",
     "electron-vite": "^4.0.1",
+    "jsdom": "^23.0.1",
+    "oxlint": "^0.2.11",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.3.0",
-    "vite": "^5.0.0",
+    "vite": "^5.4.21",
+    "vitest": "^1.0.4",
     "vue-tsc": "^1.8.22",
     "wait-on": "^7.2.0"
   },
@@ -58,13 +81,12 @@
     "better-sqlite3": "^12.4.1",
     "element-plus": "^2.4.4",
     "pako": "^2.1.0",
-    "pinia": "^2.1.7",
-    "sqlite3": "^5.1.6",
+    "pinia": "^2.3.1",
     "three": "^0.160.0",
     "tiff.js": "^1.0.0",
     "utif": "^3.1.0",
-    "vue": "^3.3.9",
-    "vue-router": "^4.2.5"
+    "vue": "^3.5.24",
+    "vue-router": "^4.6.3"
   },
   "build": {
     "appId": "com.crystallography.image-mesh",
@@ -82,7 +104,9 @@
       {
         "from": "resources",
         "to": "resources",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "mac": {
@@ -90,11 +114,17 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         },
         {
           "target": "zip",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ],
       "icon": "assets/icon.icns",
@@ -106,11 +136,15 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "assets/icon.ico",
@@ -120,15 +154,21 @@
       "target": [
         {
           "target": "AppImage",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "deb",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "rpm",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "assets/icon.png",

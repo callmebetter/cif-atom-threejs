@@ -5,279 +5,210 @@
         <div class="card-header">
           <span>3D结构可视化</span>
           <div class="header-actions">
-            <el-button @click="resetView">
-              <el-icon><Refresh /></el-icon>
-              重置视图
-            </el-button>
-            <el-button type="primary" @click="exportImage">
-              <el-icon><Camera /></el-icon>
-              导出图像
-            </el-button>
+            <el-button-group>
+              <el-button size="small" @click="resetView">重置视图</el-button>
+              <el-button size="small" @click="exportImage">导出图片</el-button>
+            </el-button-group>
           </div>
         </div>
       </template>
 
-      <div v-if="!hasStructureData" class="no-data">
-        <el-empty description="没有可显示的结构数据">
-          <el-button type="primary" @click="$router.push('/cif-analysis')">
-            去解析CIF文件
-          </el-button>
-        </el-empty>
-      </div>
+      <div class="visualization-layout">
+        <!-- 控制面板 -->
+        <div class="control-panel">
+          <el-form :model="visualOptions" label-width="80px" size="small">
+            <el-form-item label="显示模式">
+              <el-select v-model="visualOptions.displayMode" @change="updateVisualization">
+                <el-option label="球棍模型" value="ball-stick" />
+                <el-option label="空间填充" value="space-filling" />
+                <el-option label="线框模型" value="wireframe" />
+              </el-select>
+            </el-form-item>
 
-      <div v-else class="visualization-workspace">
-        <el-row :gutter="20">
-          <el-col :span="18">
-            <div class="threejs-container">
-              <div ref="threejsContainer" class="threejs-canvas"></div>
-            </div>
-          </el-col>
-          
-          <el-col :span="6">
-            <div class="control-panel">
-              <h4>显示控制</h4>
-              
-              <el-form label-width="80px" size="small">
-                <el-form-item label="显示模式">
-                  <el-radio-group v-model="displayMode" @change="updateDisplay">
-                    <el-radio label="ball-stick">球棍模型</el-radio>
-                    <el-radio label="space-filling">空间填充</el-radio>
-                    <el-radio label="wireframe">线框模型</el-radio>
-                  </el-radio-group>
-                </el-form-item>
-                
-                <el-form-item label="原子大小">
-                  <el-slider
-                    v-model="atomSize"
-                    :min="0.5"
-                    :max="2"
-                    :step="0.1"
-                    @change="updateAtomSize"
-                  />
-                </el-form-item>
-                
-                <el-form-item label="键粗细">
-                  <el-slider
-                    v-model="bondThickness"
-                    :min="0.1"
-                    :max="1"
-                    :step="0.1"
-                    @change="updateBondThickness"
-                  />
-                </el-form-item>
-                
-                <el-form-item label="旋转速度">
-                  <el-slider
-                    v-model="rotationSpeed"
-                    :min="0"
-                    :max="0.05"
-                    :step="0.005"
-                    @change="updateRotationSpeed"
-                  />
-                </el-form-item>
-                
-                <el-form-item label="背景色">
-                  <el-color-picker v-model="backgroundColor" @change="updateBackgroundColor" />
-                </el-form-item>
-              </el-form>
+            <el-form-item label="原子大小">
+              <el-slider 
+                v-model="visualOptions.atomSize" 
+                :min="0.5" 
+                :max="2" 
+                :step="0.1"
+                @change="updateVisualization"
+              />
+            </el-form-item>
 
-              <div class="element-filters">
-                <h5>元素显示</h5>
-                <el-checkbox-group v-model="visibleElements" @change="updateElementVisibility">
-                  <el-checkbox v-for="element in availableElements" :key="element" :label="element">
-                    {{ element }}
-                  </el-checkbox>
-                </el-checkbox-group>
-              </div>
-            </div>
-          </el-col>
-        </el-row>
+            <el-form-item label="键粗细">
+              <el-slider 
+                v-model="visualOptions.bondThickness" 
+                :min="0.5" 
+                :max="3" 
+                :step="0.1"
+                @change="updateVisualization"
+              />
+            </el-form-item>
+
+            <el-form-item label="旋转速度">
+              <el-slider 
+                v-model="visualOptions.rotationSpeed" 
+                :min="0" 
+                :max="0.02" 
+                :step="0.001"
+                @change="updateVisualization"
+              />
+            </el-form-item>
+
+            <el-form-item label="背景颜色">
+              <el-color-picker 
+                v-model="visualOptions.backgroundColor" 
+                @change="updateVisualization"
+              />
+            </el-form-item>
+
+            <el-form-item label="显示元素">
+              <el-checkbox-group v-model="visualOptions.visibleElements" @change="updateVisualization">
+                <el-checkbox 
+                  v-for="element in availableElements" 
+                  :key="element" 
+                  :label="element"
+                >
+                  {{ element }}
+                </el-checkbox>
+              </el-checkbox-group>
+            </el-form-item>
+          </el-form>
+        </div>
+
+        <!-- 3D可视化区域 -->
+        <div class="visualization-area">
+          <div 
+            ref="visualizationContainer" 
+            class="threejs-container"
+            v-loading="loading"
+          />
+        </div>
       </div>
     </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, nextTick } from 'vue'
 import { useAppStore } from '@/stores/app'
-import { ElMessage } from 'element-plus'
-import { StructureVisualizer, VisualizationOptions } from '@/utils/structureVisualizer'
+import { StructureVisualizer, type VisualizationOptions } from '@/utils/structureVisualizer'
 import { CifData } from '@/utils/cifParser'
 
 const appStore = useAppStore()
 
-const threejsContainer = ref<HTMLElement>()
-const hasStructureData = ref(false)
-const displayMode = ref<'ball-stick' | 'space-filling' | 'wireframe'>('ball-stick')
-const atomSize = ref(1)
-const bondThickness = ref(0.3)
-const rotationSpeed = ref(0)
-const backgroundColor = ref('#ffffff')
-const visibleElements = ref<string[]>([])
+// 响应式数据
+const visualizationContainer = ref<HTMLElement>()
+const loading = ref(false)
+const visualizer = ref<StructureVisualizer | null>(null)
+const availableElements = ref<string[]>([])
 
-let visualizer: StructureVisualizer | null = null
-let currentCifData: CifData | null = null
+// 可视化选项
+const visualOptions = reactive<VisualizationOptions>({
+  displayMode: 'ball-stick',
+  atomSize: 1.0,
+  bondThickness: 1.0,
+  rotationSpeed: 0.001,
+  backgroundColor: '#f0f0f0',
+  visibleElements: []
+})
 
-const availableElements = ref(['H', 'He', 'Li', 'Be', 'B', 'C', 'N', 'O', 'F', 'Ne', 
-  'Na', 'Mg', 'Al', 'Si', 'P', 'S', 'Cl', 'Ar', 'K', 'Ca', 'Fe', 'Cu', 'Zn'])
-
-const initVisualizer = () => {
-  if (!threejsContainer.value) return
-
-  const options: VisualizationOptions = {
-    displayMode: displayMode.value,
-    atomSize: atomSize.value,
-    bondThickness: bondThickness.value,
-    rotationSpeed: rotationSpeed.value,
-    backgroundColor: backgroundColor.value,
-    visibleElements: visibleElements.value
-  }
-
-  visualizer = new StructureVisualizer(threejsContainer.value, options)
-  
-  // 如果有CIF数据，加载结构
-  if (currentCifData) {
-    visualizer.loadStructure(currentCifData)
-  }
-}
-
-const loadCifData = () => {
+// 加载CIF数据
+const loadCifData = async () => {
   try {
-    // 从appStore获取CIF数据
-    const cifData = appStore.cifData
+    loading.value = true
+    appStore.setStatus('正在加载CIF数据...')
+
+    // 从store获取CIF数据
+    const cifData = appStore.getCurrentCifData()
     
     if (!cifData) {
-      throw new Error('CIF数据不存在')
+      appStore.setStatus('未找到CIF数据，请先上传并解析CIF文件')
+      return
+    }
+
+    // 提取可用元素
+    const elements = new Set<string>()
+    if (cifData.atoms) {
+      cifData.atoms.forEach(atom => {
+        if (atom.element) {
+          elements.add(atom.element)
+        }
+      })
     }
     
-    if (!cifData.atoms || !Array.isArray(cifData.atoms)) {
-      throw new Error('CIF数据中缺少原子信息')
+    availableElements.value = Array.from(elements).sort()
+    visualOptions.visibleElements = availableElements.value
+
+    // 初始化可视化器
+    if (visualizationContainer.value && !visualizer.value) {
+      visualizer.value = new StructureVisualizer(visualizationContainer.value, visualOptions)
     }
-    
-    if (cifData.atoms.length === 0) {
-      throw new Error('CIF数据中没有原子')
+
+    // 加载结构
+    if (visualizer.value) {
+      await visualizer.value.loadStructure(cifData)
+      appStore.setStatus(`已加载晶体结构：${cifData.atoms?.length || 0}个原子`)
     }
-    
-    currentCifData = cifData
-    hasStructureData.value = true
-    
-    // 获取实际存在的元素
-    const elements = [...new Set(cifData.atoms.map(atom => atom.element))]
-    if (elements.length === 0) {
-      throw new Error('无法从原子数据中提取元素信息')
-    }
-    
-    availableElements.value = elements
-    
-    // 默认显示所有元素
-    visibleElements.value = elements
-    
-    if (!visualizer) {
-      throw new Error('可视化器未初始化')
-    }
-    
-    try {
-      visualizer.loadStructure(cifData)
-      console.log(`成功加载 ${cifData.atoms.length} 个原子的结构`)
-    } catch (vizError) {
-      const vizErrorMessage = vizError instanceof Error ? vizError.message : '可视化加载失败'
-      console.error('Visualization error:', vizErrorMessage)
-      throw new Error(`可视化加载失败: ${vizErrorMessage}`)
-    }
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : '加载CIF数据时发生未知错误'
-    console.error('Failed to load CIF data:', errorMessage)
-    hasStructureData.value = false
-    ElMessage.error(`加载CIF数据失败: ${errorMessage}`)
-  }
-}
 
-const resetView = () => {
-  if (visualizer) {
-    visualizer.resetView()
-    ElMessage.success('视图已重置')
-  }
-}
-
-const updateDisplay = () => {
-  if (visualizer) {
-    visualizer.updateOptions({ displayMode: displayMode.value })
-  }
-}
-
-const updateAtomSize = () => {
-  if (visualizer) {
-    visualizer.updateOptions({ atomSize: atomSize.value })
-  }
-}
-
-const updateBondThickness = () => {
-  if (visualizer) {
-    visualizer.updateOptions({ bondThickness: bondThickness.value })
-  }
-}
-
-const updateRotationSpeed = () => {
-  if (visualizer) {
-    visualizer.updateOptions({ rotationSpeed: rotationSpeed.value })
-  }
-}
-
-const updateBackgroundColor = () => {
-  if (visualizer) {
-    visualizer.updateOptions({ backgroundColor: backgroundColor.value })
-  }
-}
-
-const updateElementVisibility = () => {
-  if (visualizer) {
-    visualizer.updateOptions({ visibleElements: visibleElements.value })
-  }
-}
-
-const exportImage = () => {
-  if (!visualizer) {
-    ElMessage.error('可视化器未初始化')
-    return
-  }
-  
-  try {
-    const dataURL = visualizer.exportImage(1920, 1080)
-    const link = document.createElement('a')
-    link.download = 'crystal-structure.png'
-    link.href = dataURL
-    link.click()
-    
-    ElMessage.success('图像导出成功')
   } catch (error) {
-    console.error('Export failed:', error)
-    ElMessage.error('图像导出失败')
+    console.error('加载CIF数据失败:', error)
+    appStore.setStatus(`加载失败: ${error instanceof Error ? error.message : '未知错误'}`)
+  } finally {
+    loading.value = false
   }
 }
 
+// 更新可视化
+const updateVisualization = () => {
+  if (visualizer.value) {
+    visualizer.value.updateOptions(visualOptions)
+  }
+}
+
+// 重置视图
+const resetView = () => {
+  if (visualizer.value) {
+    visualizer.value.resetView()
+  }
+}
+
+// 导出图片
+const exportImage = () => {
+  if (visualizer.value) {
+    try {
+      const dataURL = visualizer.value.exportImage(1920, 1080)
+      const link = document.createElement('a')
+      link.download = `structure-visualization-${Date.now()}.png`
+      link.href = dataURL
+      link.click()
+      appStore.setStatus('图片已导出')
+    } catch (error) {
+      console.error('导出图片失败:', error)
+      appStore.setStatus('导出失败')
+    }
+  }
+}
+
+// 生命周期
 onMounted(async () => {
-  appStore.setStatus('3D结构可视化模块已就绪')
+  appStore.setStatus('3D结构可视化模块已加载')
   
-  // 加载CIF数据
-  loadCifData()
-  
+  // 等待DOM更新
   await nextTick()
-  initVisualizer()
+  
+  // 延迟加载以确保容器已渲染
+  setTimeout(() => {
+    loadCifData()
+  }, 100)
 })
 
 onUnmounted(() => {
-  if (visualizer) {
-    visualizer.dispose()
-    visualizer = null
+  if (visualizer.value) {
+    visualizer.value.dispose()
+    visualizer.value = null
   }
 })
-
-// 监听appStore中的cifData变化
-watch(() => appStore.cifData, (newData) => {
-  if (newData) {
-    loadCifData()
-  }
-}, { deep: true })
 </script>
 
 <style scoped>
@@ -292,60 +223,62 @@ watch(() => appStore.cifData, (newData) => {
   align-items: center;
 }
 
-.header-actions {
+.visualization-layout {
   display: flex;
-  gap: 10px;
-}
-
-.no-data {
-  text-align: center;
-  padding: 40px;
-}
-
-.visualization-workspace {
-  min-height: 700px;
-}
-
-.threejs-container {
-  background: #f5f5f5;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.threejs-canvas {
-  width: 100%;
+  gap: 20px;
   height: 600px;
 }
 
 .control-panel {
-  background: #fafafa;
-  border: 1px solid #e0e0e0;
+  width: 280px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  border-right: 1px solid #e4e7ed;
+  padding-right: 20px;
+}
+
+.visualization-area {
+  flex: 1;
+  position: relative;
+}
+
+.threejs-container {
+  width: 100%;
+  height: 100%;
+  border: 1px solid #dcdfe6;
   border-radius: 4px;
-  padding: 20px;
-  height: fit-content;
+  overflow: hidden;
 }
 
-.control-panel h4 {
-  margin-bottom: 15px;
-  color: #303133;
-}
-
-.element-filters {
-  margin-top: 20px;
-  padding-top: 20px;
-  border-top: 1px solid #e0e0e0;
-}
-
-.element-filters h5 {
-  margin-bottom: 10px;
-  color: #606266;
-  font-size: 14px;
+:deep(.el-form-item) {
+  margin-bottom: 18px;
 }
 
 :deep(.el-checkbox-group) {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+@media (max-width: 1200px) {
+  .visualization-layout {
+    flex-direction: column;
+    height: auto;
+  }
+  
+  .control-panel {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid #e4e7ed;
+    padding-right: 0;
+    padding-bottom: 20px;
+    max-height: 300px;
+  }
+  
+  .visualization-area {
+    height: 500px;
+  }
 }
 </style>

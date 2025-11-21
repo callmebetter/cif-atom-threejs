@@ -211,6 +211,10 @@ export const useAppStore = defineStore('app', () => {
     cifData.value = data
   }
 
+  const getCurrentCifData = () => {
+    return cifData.value
+  }
+
   return {
     // State
     statusText,
@@ -246,6 +250,7 @@ export const useAppStore = defineStore('app', () => {
     getSetting,
     setSetting,
     loadDatabaseStats,
-    setCifData
+    setCifData,
+    getCurrentCifData
   }
 })

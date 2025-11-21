@@ -27,7 +27,7 @@
 
 ### 开发环境
 - **Node.js**: >= 16.0.0
-- **npm**: >= 8.0.0 或 **yarn**: >= 1.22.0
+- **pnpm**: >= 9.6.0
 - **Python**: >= 3.8 (用于某些原生模块编译)
 
 ### 运行环境
@@ -37,34 +37,99 @@
 
 ## 安装和运行
 
-### 1. 克隆项目
+### 🚀 快速安装（推荐）
+
+#### 方式一：一键安全安装
+```bash
+git clone <repository-url>
+cd image-mesh
+npm run install:safe
+```
+
+#### 方式二：完整项目设置
+```bash
+git clone <repository-url>
+cd image-mesh
+npm run setup:project
+```
+
+### 📦 传统安装方式
+
+#### 1. 克隆项目
 ```bash
 git clone <repository-url>
 cd image-mesh
 ```
 
-### 2. 安装依赖
+#### 2. 安装依赖
 ```bash
+# 推荐使用安全安装脚本
+npm run install:safe
+
+# 或传统方式（可能遇到 better-sqlite3 编译问题）
 npm install
 ```
 
-### 3. 开发模式运行
+#### 3. 开发模式运行
 ```bash
 # 启动 Vite 开发服务器
 npm run dev:vite
 
 # 在新终端中启动 Electron 应用
 npm run dev:electron
+
+# 或使用一体化启动命令
+npm run dev
 ```
 
-### 4. 构建生产版本
+#### 4. 构建生产版本
 ```bash
 # 构建前端资源
 npm run build
 
 # 构建 Electron 应用
 npm run build:electron
+
+# 或构建所有平台
+npm run build:win    # Windows
+npm run build:mac    # macOS
+npm run build:linux  # Linux
 ```
+
+### ⚠️ 安装问题解决
+
+如果遇到 `better-sqlite3` 编译错误：
+
+#### Windows 环境
+```bash
+# 使用我们提供的解决方案
+npm run rebuild:native:windows
+
+# 或手动执行
+set GYP_MSVS_VERSION=2019 && pnpm dlx electron-rebuild --force
+```
+
+#### 所有环境
+```bash
+# 查看详细故障排除指南
+cat docs/TROUBLESHOOTING.md
+
+# 查看快速安装指南
+cat docs/QUICK_INSTALL.md
+```
+
+### 🔧 可用脚本命令
+
+| 命令 | 功能 | 推荐场景 |
+|------|------|----------|
+| `install:safe` | 安全安装依赖 | 首次安装 |
+| `install:full` | 完整安装+重建 | 需要原生性能 |
+| `setup:project` | 项目完整设置 | 新项目克隆 |
+| `rebuild:native` | 重建原生模块 | 更新后 |
+| `rebuild:native:windows` | Windows 专用重建 | Windows 问题 |
+| `clean` | 清理 npm 缓存、node_modules 和 package-lock.json | 解决依赖问题 |
+
+> 💡 **提示**: 如果不熟悉原生模块编译问题，建议使用 `npm run install:safe` 进行安装。
 
 ## 项目结构
 
@@ -133,7 +198,7 @@ image-mesh/
 - **原子信息**: 元素类型、占位率、温度因子等
 
 ### 示例 CIF 文件格式
-```cif
+``cif
 data_example
 _cell_length_a    5.43
 _cell_length_b    5.43
@@ -260,6 +325,7 @@ visualizer.loadStructure(cifData)
 - 遵循 ESLint 和 Prettier 配置
 - 为新功能编写单元测试
 - 添加适当的注释和文档
+- **TypeScript 类型使用**: 尽量使用 `unknown` 而不是 `any` 类型。`unknown` 类型更安全，强制在使用前进行类型检查，而 `any` 会绕过类型检查。只有在确实无法确定类型且需要灵活性的情况下才使用 `any`。
 
 ## 许可证
 

@@ -76,7 +76,7 @@ async function main() {
       ? 'pnpm install --ignore-scripts --ignore-engines'
       : packageManager === 'yarn'
       ? 'yarn install --ignore-scripts --ignore-engines'
-      : 'npm install --ignore-scripts --ignore-engines'
+      : 'npm install --ignore-scripts'
     
     runCommand(installCommand, '安装依赖包')
 

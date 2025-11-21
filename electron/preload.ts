@@ -1,8 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { ElectronAPI } from '../src/types/electron'
+import type { ElectronAPI } from '../src/types/electron.d.ts'
 
 // Updated electronAPI with unified invoke method
 const electronAPI: ElectronAPI = {
+  // Dialog operations
+  dialog: {
+    showOpenDialog: (options) => ipcRenderer.invoke('dialog:showOpenDialog', options)
+  },
+
   // Unified invoke method
   invoke: (channel, args) => ipcRenderer.invoke(channel, args),
   

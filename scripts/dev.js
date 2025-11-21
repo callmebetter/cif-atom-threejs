@@ -82,7 +82,7 @@ function checkDevPrerequisites() {
   // Check if node_modules exists
   if (!fs.existsSync('node_modules')) {
     log('⚠️  node_modules not found. Installing dependencies...', 'yellow');
-    runCommand('npm install', 'Install dependencies');
+    runCommand('npm install --ignore-scripts', 'Install dependencies');
   }
 
   log('✅ Development environment ready', 'green');
@@ -264,6 +264,7 @@ function showDevInfo() {
   log('lint     - Run linting', 'yellow');
   log('check    - Run tests and linting', 'yellow');
   log('info     - Show development information', 'yellow');
+  log('clean    - Clean npm cache, remove node_modules and package-lock.json (use npm run clean)', 'yellow');
 }
 
 function main() {
