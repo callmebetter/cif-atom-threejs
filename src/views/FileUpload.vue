@@ -254,7 +254,14 @@ const processFile = async (file: FileInfo) => {
 
 const viewFile = (file: FileInfo) => {
   appStore.setCurrentFile(file)
-  processFile(file)
+  
+  // For TIF files, continue to use the existing processing flow
+  if (file.type === 'tif') {
+    processFile(file)
+  } else {
+    // For CIF and ZIP files, redirect to the new file content page
+    router.push(`/file-content/${file.id}`)
+  }
 }
 
 const deleteFile = async (file: FileInfo) => {

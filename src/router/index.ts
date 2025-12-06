@@ -43,6 +43,11 @@ const router = createRouter({
           path: '/report-generator',
           name: 'ReportGenerator',
           component: () => import('@/views/ReportGenerator.vue')
+        },
+        {
+          path: '/file-content/:id',
+          name: 'FileContent',
+          component: () => import('@/views/FileContentView.vue')
         }
       ]
     }

@@ -27,6 +27,7 @@ export const useAppStore = defineStore('app', () => {
   const appDataPaths = ref<AppDataPaths | null>(null)
   const loadedFiles = ref<FileInfo[]>([])
   const currentFile = ref<FileInfo | null>(null)
+  const currentFileContent = ref<string | ArrayBuffer | null>(null)
   const isLoading = ref(false)
 
   // Database state
@@ -215,6 +216,14 @@ export const useAppStore = defineStore('app', () => {
     return cifData.value
   }
 
+  const setCurrentFileContent = (content: string | ArrayBuffer | null) => {
+    currentFileContent.value = content
+  }
+
+  const clearCurrentFileContent = () => {
+    currentFileContent.value = null
+  }
+
   return {
     // State
     statusText,
@@ -222,6 +231,7 @@ export const useAppStore = defineStore('app', () => {
     appDataPaths,
     loadedFiles,
     currentFile,
+    currentFileContent,
     isLoading,
     projects,
     currentProject,
@@ -251,6 +261,8 @@ export const useAppStore = defineStore('app', () => {
     setSetting,
     loadDatabaseStats,
     setCifData,
-    getCurrentCifData
+    getCurrentCifData,
+    setCurrentFileContent,
+    clearCurrentFileContent
   }
 })
