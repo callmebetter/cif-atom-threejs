@@ -1,7 +1,7 @@
-import { ipcMain, dialog, app } from 'electron'
+import { ipcMain, dialog, app, shell } from 'electron'
 import { readFile, writeFile, mkdir } from 'fs/promises'
 import { existsSync } from 'fs'
-import { join } from 'path'
+import { join, dirname } from 'path'
 import { getDatabaseManager } from './database'
 
 export function setupIpcHandlers(): void {
@@ -235,6 +235,28 @@ export function setupIpcHandlers(): void {
   ipcMain.handle('db:vacuum', async () => {
     try {
       db.vacuum()
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // Get database path handler
+  ipcMain.handle('db:get-database-path', async () => {
+    try {
+      const dbPath = db.getDatabasePath()
+      return { success: true, data: dbPath }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // Open database directory handler
+  ipcMain.handle('db:open-database-dir', async () => {
+    try {
+      const dbPath = db.getDatabasePath()
+      const dbDir = dirname(dbPath)
+      await shell.openPath(dbDir)
       return { success: true }
     } catch (error) {
       return { success: false, error: (error as Error).message }

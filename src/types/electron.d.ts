@@ -162,6 +162,11 @@ export interface ElectronAPI {
       success: boolean
       error?: string
     }>
+    getDatabasePath(): Promise<{
+      success: boolean
+      path?: string
+      error?: string
+    }>
   }
 }
 

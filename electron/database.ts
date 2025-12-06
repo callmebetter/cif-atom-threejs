@@ -378,6 +378,10 @@ class DatabaseManager {
     this.db.exec('VACUUM')
     console.log('Database vacuumed')
   }
+
+  public getDatabasePath(): string {
+    return this.dbPath
+  }
 }
 
 // 单例模式

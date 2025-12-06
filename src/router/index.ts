@@ -48,6 +48,11 @@ const router = createRouter({
           path: '/file-content/:id',
           name: 'FileContent',
           component: () => import('@/views/FileContentView.vue')
+        },
+        {
+          path: '/settings',
+          name: 'Settings',
+          component: () => import('@/views/SettingsPage.vue')
         }
       ]
     }

@@ -40,7 +40,8 @@ const electronAPI: ElectronAPI = {
     // Database maintenance
     getStats: () => ipcRenderer.invoke('db:get-stats'),
     backup: (backupPath) => ipcRenderer.invoke('db:backup', backupPath),
-    vacuum: () => ipcRenderer.invoke('db:vacuum')
+    vacuum: () => ipcRenderer.invoke('db:vacuum'),
+    getDatabasePath: () => ipcRenderer.invoke('db:get-database-path')
   }
 }
 

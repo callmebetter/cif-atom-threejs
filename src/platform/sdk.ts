@@ -47,6 +47,8 @@ export const databaseOperations = {
 
   // Database maintenance
   getStats: () => safeInvoke('db:get-stats', void 0),
+  getDatabasePath: () => safeInvoke('db:get-database-path', void 0),
+  openDatabaseDir: () => safeInvoke('db:open-database-dir', void 0),
   backup: (backupPath: string) => safeInvoke('db:backup', backupPath),
   vacuum: () => safeInvoke('db:vacuum', void 0),
 };

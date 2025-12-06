@@ -88,6 +88,8 @@ export type ChannelMap = {
   'db:get-stats': { req: void; res: StatsResponse };
   'db:backup': { req: string; res: ApiResponse<void> };
   'db:vacuum': { req: void; res: ApiResponse<void> };
+  'db:get-database-path': { req: void; res: ApiResponse<string> };
+  'db:open-database-dir': { req: void; res: ApiResponse<void> };
 };
 
 export type Channel = keyof ChannelMap;

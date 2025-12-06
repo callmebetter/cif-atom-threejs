@@ -58,6 +58,11 @@
             <el-icon><Document /></el-icon>
             <template #title>报告生成</template>
           </el-menu-item>
+          
+          <el-menu-item index="/settings">
+            <el-icon><Setting /></el-icon>
+            <template #title>设置</template>
+          </el-menu-item>
         </el-menu>
         
         <div class="sidebar-toggle" @click="toggleSidebar">
