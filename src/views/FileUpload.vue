@@ -11,28 +11,16 @@
         </div>
       </template>
 
-      <!-- 拖拽上传区域 -->
-      <el-upload
-        ref="uploadRef"
-        class="upload-area"
-        drag
-        :auto-upload="false"
-        :on-change="handleFileChange"
-        :on-remove="handleFileRemove"
-        :file-list="fileList"
-        multiple
-        accept=".cif,.tif,.zip"
-      >
-        <el-icon class="el-icon--upload"><upload-filled /></el-icon>
-        <div class="el-upload__text">
-          将文件拖到此处，或<em>点击选择文件</em>
+      <!-- 提示信息 -->
+      <div class="upload-info">
+        <el-icon class="el-icon--info"><InfoFilled /></el-icon>
+        <div class="upload-info-text">
+          <h4>支持格式</h4>
+          <p>CIF晶体结构文件、TIF显微图像文件、ZIP压缩包</p>
+          <h4>操作说明</h4>
+          <p>点击上方"选择文件"按钮，通过文件选择器选择要导入的文件</p>
         </div>
-        <template #tip>
-          <div class="el-upload__tip">
-            支持格式：CIF晶体结构文件、TIF显微图像文件、ZIP压缩包
-          </div>
-        </template>
-      </el-upload>
+      </div>
 
       <!-- 文件列表 -->
       <div v-if="uploadedFiles.length > 0" class="file-list-section">
@@ -105,16 +93,14 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus, Operation, Delete, InfoFilled } from '@element-plus/icons-vue'
 import { useAppStore } from '@/stores/app'
-import type { UploadFile, UploadFiles } from 'element-plus'
 import type { FileInfo } from '@/stores/app'
 import { fileOperations } from '@/platform/sdk'
 
 const appStore = useAppStore()
 const router = useRouter()
 
-const uploadRef = ref()
-const fileList = ref<UploadFiles>([])
 const isLoading = ref(false)
 const isProcessing = ref(false)
 const showProgress = ref(false)
@@ -123,6 +109,9 @@ const progressStatus = ref<'success' | 'exception' | 'warning' | undefined>(unde
 const progressText = ref('')
 const processedCount = ref(0)
 const totalCount = ref(0)
+// Drag and drop state
+const isDragging = ref(false)
+const dragText = ref('拖拽文件到此处上传')
 
 const uploadedFiles = computed(() => appStore.loadedFiles)
 
@@ -137,7 +126,7 @@ const selectFiles = async () => {
       ],
       properties: ['openFile', 'multiSelections']
     })
-
+    
     if (result.success && result.files && result.files.length > 0) {
       // Validate file paths
       const validPaths = result.files.filter(path => {
@@ -201,28 +190,15 @@ const handleSelectedFiles = async (filePaths: string[]) => {
     
     ElMessage.success(`成功导入 ${filePaths.length} 个文件`)
   } catch (error) {
-    ElMessage.error('文件导入失败: ' + error)
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    ElMessage.error('文件导入失败: ' + errorMsg)
   } finally {
     isLoading.value = false
     appStore.setLoading(false)
   }
 }
 
-const handleFileChange = async (file: UploadFile) => {
-  if (file.raw) {
-    const fileInfo = await processSingleFile(file.raw.path)
-    if (fileInfo) {
-      appStore.addFile(fileInfo)
-    }
-  }
-}
 
-const handleFileRemove = (file: UploadFile) => {
-  const fileInfo = uploadedFiles.value.find(f => f.name === file.name)
-  if (fileInfo) {
-    appStore.removeFile(fileInfo.id)
-  }
-}
 
 const processSingleFile = async (filePath: string): Promise<FileInfo | null> => {
   try {
@@ -238,19 +214,20 @@ const processSingleFile = async (filePath: string): Promise<FileInfo | null> => 
     if (fileType === 'unknown') {
       throw new Error('不支持的文件类型')
     }
-
+    console.log(result)
     return {
-      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+      id: Date.now().toString() + Math.random().toString(36).substring(2, 11),
       name: fileName,
       type: fileType,
-      size: result.data ? result.data.length : 0,
+      size: result.data ? (result.data as any).byteLength || 0 : 0,
       path: filePath,
       uploadTime: new Date(),
       processed: false
     }
   } catch (error) {
-    console.error('处理文件失败:', error)
-    ElMessage.error(`处理文件 ${filePath} 失败: ${error}`)
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    console.error('处理文件失败:', errorMsg)
+    ElMessage.error(`处理文件 ${filePath} 失败: ${errorMsg}`)
     return null
   }
 }
@@ -323,8 +300,9 @@ const processAllFiles = async () => {
     progressText.value = '批量处理完成'
     ElMessage.success('所有文件处理完成')
   } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error)
     progressStatus.value = 'exception'
-    progressText.value = '批量处理失败: ' + error
+    progressText.value = '批量处理失败: ' + errorMsg
     ElMessage.error('批量处理失败')
   } finally {
     isProcessing.value = false
@@ -342,7 +320,6 @@ const clearAllFiles = async () => {
     })
     
     appStore.clearFiles()
-    fileList.value = []
     ElMessage.success('文件清空成功')
   } catch {
     // 用户取消清空
@@ -370,6 +347,82 @@ const formatDate = (date: Date) => {
   return new Date(date).toLocaleString('zh-CN')
 }
 
+// Drag and drop event handlers
+const handleDragOver = () => {
+  isDragging.value = true
+  dragText.value = '释放文件开始上传'
+}
+
+const handleDragEnter = () => {
+  isDragging.value = true
+  dragText.value = '释放文件开始上传'
+}
+
+const handleDragLeave = (event: DragEvent) => {
+  // Check if the mouse is leaving the drop zone completely
+  const target = event.currentTarget as HTMLElement
+  const related = event.relatedTarget as HTMLElement | null
+  if (target === related || (related && !target.contains(related))) {
+    isDragging.value = false
+    dragText.value = '拖拽文件到此处上传'
+  }
+}
+
+const handleDrop = (event: DragEvent) => {
+  isDragging.value = false
+  dragText.value = '拖拽文件到此处上传'
+  
+  // Get the dropped items
+  const items = event.dataTransfer?.items
+  if (!items || items.length === 0) {
+    return
+  }
+  
+  // Process dropped items
+  const filePaths: string[] = []
+  
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i]
+    if (item.kind === 'file') {
+      // For Electron, we can get the file path from webkitGetAsEntry
+      const entry = item.webkitGetAsEntry()
+      if (entry && entry.isFile) {
+        // In Electron, we can access the full path
+        // Note: This works in Electron renderer with proper permissions
+        const file = item.getAsFile()
+        if (file) {
+          // Get the full path from the file object (works in Electron)
+          // @ts-ignore - Electron adds path property to File objects
+          const fullPath = file.path
+          if (fullPath) {
+            filePaths.push(fullPath)
+          }
+        }
+      }
+    }
+  }
+  
+  if (filePaths.length === 0) {
+    ElMessage.warning('没有检测到有效的文件路径')
+    return
+  }
+  
+  // Filter supported files
+  const supportedExtensions = ['.cif', '.tif', '.zip']
+  const supportedFiles = filePaths.filter(filePath => {
+    const ext = filePath.toLowerCase().substring(filePath.lastIndexOf('.'))
+    return supportedExtensions.includes(ext)
+  })
+  
+  if (supportedFiles.length === 0) {
+    ElMessage.error('没有支持的文件类型')
+    return
+  }
+  
+  // Process the supported files
+  handleSelectedFiles(supportedFiles)
+}
+
 onMounted(() => {
   appStore.setStatus('文件导入模块已就绪')
 })
@@ -391,8 +444,92 @@ onMounted(() => {
   align-items: center;
 }
 
-.upload-area {
-  margin-bottom: 20px;
+/* Drag and drop zone styles */
+.upload-drop-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin: 20px 0;
+  padding: 40px 20px;
+  background-color: #fafafa;
+  border: 2px dashed #dcdfe6;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-height: 200px;
+}
+
+.upload-drop-zone:hover {
+  background-color: #f5f7fa;
+  border-color: #c6e2ff;
+}
+
+.upload-drop-zone.drag-over {
+  background-color: #ecf5ff;
+  border-color: #409eff;
+  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2);
+}
+
+.upload-drop-zone .upload-icon {
+  font-size: 48px;
+  color: #c0c4cc;
+  margin-bottom: 16px;
+  transition: color 0.3s ease;
+}
+
+.upload-drop-zone:hover .upload-icon,
+.upload-drop-zone.drag-over .upload-icon {
+  color: #409eff;
+}
+
+.upload-drop-zone h3 {
+  margin: 0 0 8px 0;
+  color: #303133;
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.upload-drop-zone p {
+  margin: 0;
+  color: #909399;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.upload-info {
+  display: flex;
+  align-items: flex-start;
+  margin: 20px 0;
+  padding: 20px;
+  background-color: #f5f7fa;
+  border-radius: 8px;
+  border: 1px solid #e4e7ed;
+}
+
+.upload-info .el-icon--info {
+  font-size: 24px;
+  color: #409eff;
+  margin-right: 16px;
+  margin-top: 4px;
+}
+
+.upload-info-text h4 {
+  margin: 0 0 8px 0;
+  color: #303133;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.upload-info-text p {
+  margin: 0 0 16px 0;
+  color: #606266;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.upload-info-text p:last-child {
+  margin-bottom: 0;
 }
 
 .file-list-section {
@@ -421,15 +558,5 @@ onMounted(() => {
 .progress-info p {
   margin: 5px 0;
   color: #666;
-}
-
-:deep(.el-upload-dragger) {
-  width: 100%;
-  height: 200px;
-}
-
-:deep(.el-upload__tip) {
-  color: #909399;
-  font-size: 12px;
 }
 </style>

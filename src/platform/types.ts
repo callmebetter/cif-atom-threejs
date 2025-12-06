@@ -8,6 +8,20 @@ export interface ApiResponse<T = unknown> {
   error?: string;
 }
 
+// File operation specific response types
+export interface SelectFileResponse extends ApiResponse<string[]> {
+  files?: string[];
+}
+
+export interface ReadFileResponse extends ApiResponse<ArrayBuffer> {
+  data: ArrayBuffer;
+}
+
+export interface SaveFileResponse extends ApiResponse<string> {
+  filePath?: string;
+}
+
+// Database response types
 export interface ProjectResponse extends ApiResponse<ProjectRecord> {
   project?: ProjectRecord;
 }
@@ -38,12 +52,12 @@ export interface StatsResponse extends ApiResponse<DatabaseStats> {
 
 export type ChannelMap = {
   // File operations
-  'select-file': { req: unknown; res: ApiResponse<string[]> };
-  'read-file': { req: string; res: ApiResponse<ArrayBuffer> };
-  'save-file': { req: [string, ArrayBuffer]; res: ApiResponse<string> };
+  'select-file': { req: unknown; res: SelectFileResponse };
+  'read-file': { req: string; res: ReadFileResponse };
+  'save-file': { req: [string, ArrayBuffer]; res: SaveFileResponse };
   'init-app-data': { req: void; res: ApiResponse<unknown> };
   'get-platform-info': { req: void; res: ApiResponse<unknown> };
-
+  
   // Database operations - Projects
   'db:create-project': {
     req: Omit<ProjectRecord, 'id' | 'created_at' | 'updated_at'>;
@@ -53,7 +67,7 @@ export type ChannelMap = {
   'db:get-all-projects': { req: void; res: ProjectsResponse };
   'db:update-project': { req: [number, Partial<ProjectRecord>]; res: ProjectResponse };
   'db:delete-project': { req: number; res: ApiResponse<void> };
-
+  
   // Database operations - Analysis Records
   'db:create-analysis-record': {
     req: Omit<AnalysisRecord, 'id' | 'created_at' | 'completed_at'>;
@@ -64,12 +78,12 @@ export type ChannelMap = {
     res: AnalysesResponse
   };
   'db:delete-analysis-record': { req: number; res: ApiResponse<void> };
-
+  
   // Database operations - Settings
   'db:get-setting': { req: string; res: ApiResponse<string> };
   'db:set-setting': { req: [string, string]; res: SettingResponse };
   'db:get-all-settings': { req: void; res: SettingsResponse };
-
+  
   // Database operations - Maintenance
   'db:get-stats': { req: void; res: StatsResponse };
   'db:backup': { req: string; res: ApiResponse<void> };
