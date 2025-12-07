@@ -92,13 +92,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { fileOperations } from '@/platform/sdk'
 
 const appStore = useAppStore()
 
-const isCollapsed = ref(false)
+// Initialize isCollapsed from localStorage or default to false
+const getInitialCollapsedState = () => {
+  const stored = localStorage.getItem('sidebar-collapsed')
+  return stored ? JSON.parse(stored) : false
+}
+const isCollapsed = ref(getInitialCollapsedState())
+
 const isDark = ref(false)
 
 const sidebarWidth = computed(() => isCollapsed.value ? '64px' : '220px')
@@ -113,6 +119,11 @@ const toggleTheme = () => {
   isDark.value = !isDark.value
   document.documentElement.classList.toggle('dark', isDark.value)
 }
+
+// Watch isCollapsed changes and update localStorage
+watch(isCollapsed, (newValue) => {
+  localStorage.setItem('sidebar-collapsed', JSON.stringify(newValue))
+})
 
 onMounted(async () => {
   // Initialize app data directory
