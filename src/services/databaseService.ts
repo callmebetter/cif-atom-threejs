@@ -301,6 +301,136 @@ class DatabaseService {
       throw new Error(errorMessage)
     }
   }
+
+  // CIF record operations
+  async createCifRecord(recordData: {
+    file_name: string;
+    file_path: string;
+    parsed_atoms: string;
+    parsed_lattice: string;
+    space_group?: string;
+    parse_status: 'success' | 'failed' | 'partial';
+    parse_error?: string;
+  }): Promise<number> {
+    // Validate input
+    if (!recordData.file_name || recordData.file_name.trim() === '') {
+      throw new Error('文件名不能为空')
+    }
+    if (!recordData.file_path || recordData.file_path.trim() === '') {
+      throw new Error('文件路径不能为空')
+    }
+    if (!recordData.parsed_atoms) {
+      throw new Error('解析后的原子数据不能为空')
+    }
+    if (!recordData.parsed_lattice) {
+      throw new Error('解析后的晶胞参数不能为空')
+    }
+    if (!recordData.parse_status || !['success', 'failed', 'partial'].includes(recordData.parse_status)) {
+      throw new Error('无效的解析状态')
+    }
+    
+    try {
+      const result = await databaseOperations.createCifRecord(recordData)
+      if (!result.success) {
+        const errorMessage = result.error || '创建CIF记录失败'
+        console.error('Create CIF record failed:', errorMessage)
+        throw new Error(errorMessage)
+      }
+      return result.recordId as number
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '创建CIF记录时发生未知错误'
+      console.error('Create CIF record error:', errorMessage)
+      throw new Error(errorMessage)
+    }
+  }
+
+  async getCifRecord(id: number): Promise<any | null> {
+    // Validate input
+    if (!id || id <= 0) {
+      throw new Error('无效的CIF记录ID')
+    }
+    
+    try {
+      const result = await databaseOperations.getCifRecord(id)
+      if (!result.success) {
+        const errorMessage = result.error || '获取CIF记录失败'
+        console.error(`Get CIF record ${id} failed:`, errorMessage)
+        throw new Error(errorMessage)
+      }
+      return result.cifRecord || null
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '获取CIF记录时发生未知错误'
+      console.error(`Get CIF record ${id} error:`, errorMessage)
+      throw new Error(errorMessage)
+    }
+  }
+
+  async getCifRecords(): Promise<any[]> {
+    try {
+      const result = await databaseOperations.getCifRecords()
+      if (!result.success) {
+        const errorMessage = result.error || '获取CIF记录列表失败'
+        console.error('Get CIF records failed:', errorMessage)
+        throw new Error(errorMessage)
+      }
+      return result.cifRecords || []
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '获取CIF记录列表时发生未知错误'
+      console.error('Get CIF records error:', errorMessage)
+      throw new Error(errorMessage)
+    }
+  }
+
+  async updateCifRecord(id: number, updates: Partial<{
+    file_name?: string;
+    file_path?: string;
+    parsed_atoms?: string;
+    parsed_lattice?: string;
+    space_group?: string;
+    parse_status?: 'success' | 'failed' | 'partial';
+    parse_error?: string;
+  }>): Promise<void> {
+    // Validate input
+    if (!id || id <= 0) {
+      throw new Error('无效的CIF记录ID')
+    }
+    if (!updates || Object.keys(updates).length === 0) {
+      throw new Error('更新数据不能为空')
+    }
+    
+    try {
+      const result = await databaseOperations.updateCifRecord(id, updates)
+      if (!result.success) {
+        const errorMessage = result.error || '更新CIF记录失败'
+        console.error(`Update CIF record ${id} failed:`, errorMessage)
+        throw new Error(errorMessage)
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '更新CIF记录时发生未知错误'
+      console.error(`Update CIF record ${id} error:`, errorMessage)
+      throw new Error(errorMessage)
+    }
+  }
+
+  async deleteCifRecord(id: number): Promise<void> {
+    // Validate input
+    if (!id || id <= 0) {
+      throw new Error('无效的CIF记录ID')
+    }
+    
+    try {
+      const result = await databaseOperations.deleteCifRecord(id)
+      if (!result.success) {
+        const errorMessage = result.error || '删除CIF记录失败'
+        console.error(`Delete CIF record ${id} failed:`, errorMessage)
+        throw new Error(errorMessage)
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '删除CIF记录时发生未知错误'
+      console.error(`Delete CIF record ${id} error:`, errorMessage)
+      throw new Error(errorMessage)
+    }
+  }
 }
 
 export const databaseService = new DatabaseService()

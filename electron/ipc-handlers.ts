@@ -263,6 +263,52 @@ export function setupIpcHandlers(): void {
     }
   })
 
+  // CIF record handlers
+  ipcMain.handle('db:create-cif-record', async (_, record) => {
+    try {
+      const recordId = db.createCifRecord(record)
+      return { success: true, recordId }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  ipcMain.handle('db:get-cif-record', async (_, id: number) => {
+    try {
+      const cifRecord = db.getCifRecord(id)
+      return { success: true, cifRecord }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  ipcMain.handle('db:get-cif-records', async () => {
+    try {
+      const cifRecords = db.getCifRecords()
+      return { success: true, cifRecords }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  ipcMain.handle('db:update-cif-record', async (_, id: number, updates) => {
+    try {
+      const success = db.updateCifRecord(id, updates)
+      return { success }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  ipcMain.handle('db:delete-cif-record', async (_, id: number) => {
+    try {
+      const success = db.deleteCifRecord(id)
+      return { success }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
   // Cleanup on app quit
   app.on('before-quit', () => {
     try {

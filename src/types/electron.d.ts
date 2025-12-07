@@ -27,6 +27,19 @@ export interface SettingsRecord {
   updated_at: string
 }
 
+export interface CifRecord {
+  id: number
+  file_name: string
+  file_path: string
+  parsed_atoms: string
+  parsed_lattice: string
+  space_group?: string
+  parse_status: 'success' | 'failed' | 'partial'
+  parse_error?: string
+  created_at: string
+  updated_at: string
+}
+
 export interface DatabaseStats {
   totalProjects: number
   totalAnalyses: number
@@ -165,6 +178,31 @@ export interface ElectronAPI {
     getDatabasePath(): Promise<{
       success: boolean
       path?: string
+      error?: string
+    }>
+
+    // CIF record operations
+    createCifRecord(record: Omit<CifRecord, 'id' | 'created_at' | 'updated_at'>): Promise<{
+      success: boolean
+      recordId?: number
+      error?: string
+    }>
+    getCifRecord(id: number): Promise<{
+      success: boolean
+      cifRecord?: CifRecord
+      error?: string
+    }>
+    getCifRecords(): Promise<{
+      success: boolean
+      cifRecords?: CifRecord[]
+      error?: string
+    }>
+    updateCifRecord(id: number, updates: Partial<CifRecord>): Promise<{
+      success: boolean
+      error?: string
+    }>
+    deleteCifRecord(id: number): Promise<{
+      success: boolean
       error?: string
     }>
   }

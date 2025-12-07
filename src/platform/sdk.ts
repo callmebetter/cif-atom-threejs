@@ -51,4 +51,11 @@ export const databaseOperations = {
   openDatabaseDir: () => safeInvoke('db:open-database-dir', void 0),
   backup: (backupPath: string) => safeInvoke('db:backup', backupPath),
   vacuum: () => safeInvoke('db:vacuum', void 0),
+  
+  // CIF record operations
+  createCifRecord: (record: any) => safeInvoke('db:create-cif-record', record),
+  getCifRecord: (id: number) => safeInvoke('db:get-cif-record', id),
+  getCifRecords: () => safeInvoke('db:get-cif-records', void 0),
+  updateCifRecord: (id: number, updates: any) => safeInvoke('db:update-cif-record', [id, updates]),
+  deleteCifRecord: (id: number) => safeInvoke('db:delete-cif-record', id),
 };

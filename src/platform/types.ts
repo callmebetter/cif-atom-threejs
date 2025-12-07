@@ -50,6 +50,15 @@ export interface StatsResponse extends ApiResponse<DatabaseStats> {
   stats?: DatabaseStats;
 }
 
+// CIF response types
+export interface CifResponse extends ApiResponse {
+  cifRecord?: any;
+}
+
+export interface CifsResponse extends ApiResponse {
+  cifRecords?: any[];
+}
+
 export type ChannelMap = {
   // File operations
   'select-file': { req: unknown; res: SelectFileResponse };
@@ -90,6 +99,13 @@ export type ChannelMap = {
   'db:vacuum': { req: void; res: ApiResponse<void> };
   'db:get-database-path': { req: void; res: ApiResponse<string> };
   'db:open-database-dir': { req: void; res: ApiResponse<void> };
+  
+  // CIF record operations
+  'db:create-cif-record': { req: any; res: ApiResponse<number> };
+  'db:get-cif-record': { req: number; res: CifResponse };
+  'db:get-cif-records': { req: void; res: CifsResponse };
+  'db:update-cif-record': { req: [number, any]; res: ApiResponse<boolean> };
+  'db:delete-cif-record': { req: number; res: ApiResponse<boolean> };
 };
 
 export type Channel = keyof ChannelMap;
