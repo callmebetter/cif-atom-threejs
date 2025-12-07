@@ -1,111 +1,177 @@
 // Import database types
-import { ProjectRecord, AnalysisRecord, SettingsRecord, DatabaseStats } from '../types/electron';
+import {
+  ProjectRecord,
+  AnalysisRecord,
+  SettingsRecord,
+  DatabaseStats,
+} from "../types/electron";
 
-// API response wrapper types
+// Core response wrapper - matches actual IPC handler responses
 export interface ApiResponse<T = unknown> {
   success: boolean;
-  data?: T;
   error?: string;
+  // Dynamic properties based on operation type
 }
 
-// File operation specific response types
-export interface SelectFileResponse extends ApiResponse<string[]> {
-  files?: string[];
+// Utility types for different response patterns
+export type SuccessResponse<T> = ApiResponse<T> & T;
+export type CreateResponse = ApiResponse & {
+  projectId?: number;
+  recordId?: number;
+};
+export type BooleanResponse = ApiResponse<boolean>;
+
+// Dialog options for file selection
+export interface FileDialogOptions {
+  properties?: string[];
+  filters?: Array<{ name: string; extensions: string[] }>;
 }
 
-export interface ReadFileResponse extends ApiResponse<ArrayBuffer> {
-  data: ArrayBuffer;
+// App data paths
+export interface AppDataPaths {
+  appData: string;
+  uploads: string;
+  processed: string;
+  database: string;
 }
 
-export interface SaveFileResponse extends ApiResponse<string> {
-  filePath?: string;
+// Platform info
+export interface PlatformInfo {
+  platform: string;
+  arch: string;
+  version: string;
+  electronVersion: string;
 }
 
-// Database response types
-export interface ProjectResponse extends ApiResponse<ProjectRecord> {
-  project?: ProjectRecord;
+// Define CIF record type (replace 'any')
+export interface CifRecord {
+  id: number;
+  filename: string;
+  content?: string;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
 }
 
-export interface ProjectsResponse extends ApiResponse<ProjectRecord[]> {
-  projects?: ProjectRecord[];
-}
+// Generic database operation patterns
+type CreateOperation<T, K extends string = "projectId"> = {
+  req: Omit<T, "id" | "created_at" | "updated_at">;
+  res: CreateResponse;
+};
 
-export interface AnalysisResponse extends ApiResponse<AnalysisRecord> {
-  analysis?: AnalysisRecord;
-}
+type ReadOperation<T> = {
+  req: number;
+  res: SuccessResponse<{ [P in keyof T as P extends "id" ? never : P]: T[P] }>;
+};
 
-export interface AnalysesResponse extends ApiResponse<AnalysisRecord[]> {
-  records?: AnalysisRecord[];
-}
+type ReadAllOperation<T> = {
+  req: void;
+  res: SuccessResponse<{ [K in keyof T]: T[K] }[]>;
+};
 
-export interface SettingResponse extends ApiResponse<SettingsRecord> {
-  setting?: SettingsRecord;
-}
+type UpdateOperation<T> = {
+  req: [number, Partial<T>];
+  res: ApiResponse<boolean>;
+};
 
-export interface SettingsResponse extends ApiResponse<SettingsRecord[]> {
-  settings?: SettingsRecord[];
-}
+type DeleteOperation = {
+  req: number;
+  res: ApiResponse<boolean>;
+};
 
-export interface StatsResponse extends ApiResponse<DatabaseStats> {
-  stats?: DatabaseStats;
-}
-
-// CIF response types
-export interface CifResponse extends ApiResponse {
-  cifRecord?: any;
-}
-
-export interface CifsResponse extends ApiResponse {
-  cifRecords?: any[];
-}
-
+// Optimized ChannelMap matching actual IPC handler implementations
 export type ChannelMap = {
   // File operations
-  'select-file': { req: unknown; res: SelectFileResponse };
-  'read-file': { req: string; res: ReadFileResponse };
-  'save-file': { req: [string, ArrayBuffer]; res: SaveFileResponse };
-  'init-app-data': { req: void; res: ApiResponse<unknown> };
-  'get-platform-info': { req: void; res: ApiResponse<unknown> };
-  
+  "select-file": {
+    req: FileDialogOptions;
+    res: ApiResponse & { files?: string[] };
+  };
+  "read-file": {
+    req: string;
+    res: SuccessResponse<{ data: ArrayBuffer }>;
+  };
+  "save-file": {
+    req: [fileName: string, data: ArrayBuffer];
+    res: SuccessResponse<{ filePath: string }>;
+  };
+  "init-app-data": {
+    req: void;
+    res: SuccessResponse<AppDataPaths>;
+  };
+  "get-platform-info": {
+    req: void;
+    res: PlatformInfo; // Direct response, no wrapper needed
+  };
+
   // Database operations - Projects
-  'db:create-project': {
-    req: Omit<ProjectRecord, 'id' | 'created_at' | 'updated_at'>;
-    res: ProjectResponse
-  };
-  'db:get-project': { req: number; res: ProjectResponse };
-  'db:get-all-projects': { req: void; res: ProjectsResponse };
-  'db:update-project': { req: [number, Partial<ProjectRecord>]; res: ProjectResponse };
-  'db:delete-project': { req: number; res: ApiResponse<void> };
-  
+  "db:create-project": CreateOperation<ProjectRecord, "projectId">;
+  "db:get-project": ReadOperation<ProjectRecord>;
+  "db:get-all-projects": ReadAllOperation<ProjectRecord>;
+  "db:update-project": UpdateOperation<ProjectRecord>;
+  "db:delete-project": DeleteOperation;
+
   // Database operations - Analysis Records
-  'db:create-analysis-record': {
-    req: Omit<AnalysisRecord, 'id' | 'created_at' | 'completed_at'>;
-    res: AnalysisResponse
+  "db:create-analysis-record": CreateOperation<AnalysisRecord, "recordId">;
+  "db:get-analysis-records": {
+    req: [projectId: number, analysisType?: number];
+    res: SuccessResponse<{ records: AnalysisRecord[] }>;
   };
-  'db:get-analysis-records': {
-    req: [number | undefined, string | undefined];
-    res: AnalysesResponse
-  };
-  'db:delete-analysis-record': { req: number; res: ApiResponse<void> };
-  
+  "db:delete-analysis-record": DeleteOperation;
+
   // Database operations - Settings
-  'db:get-setting': { req: string; res: ApiResponse<string> };
-  'db:set-setting': { req: [string, string]; res: SettingResponse };
-  'db:get-all-settings': { req: void; res: SettingsResponse };
-  
+  "db:get-setting": {
+    req: string;
+    res: SuccessResponse<{ value: string }>;
+  };
+  "db:set-setting": {
+    req: [key: string, value: string];
+    res: ApiResponse;
+  };
+  "db:get-all-settings": ReadAllOperation<SettingsRecord>;
+
   // Database operations - Maintenance
-  'db:get-stats': { req: void; res: StatsResponse };
-  'db:backup': { req: string; res: ApiResponse<void> };
-  'db:vacuum': { req: void; res: ApiResponse<void> };
-  'db:get-database-path': { req: void; res: ApiResponse<string> };
-  'db:open-database-dir': { req: void; res: ApiResponse<void> };
-  
-  // CIF record operations
-  'db:create-cif-record': { req: any; res: ApiResponse<number> };
-  'db:get-cif-record': { req: number; res: CifResponse };
-  'db:get-cif-records': { req: void; res: CifsResponse };
-  'db:update-cif-record': { req: [number, any]; res: ApiResponse<boolean> };
-  'db:delete-cif-record': { req: number; res: ApiResponse<boolean> };
+  "db:get-stats": {
+    req: void;
+    res: SuccessResponse<{ stats: DatabaseStats }>;
+  };
+  "db:backup": {
+    req: string;
+    res: ApiResponse;
+  };
+  "db:vacuum": {
+    req: void;
+    res: ApiResponse;
+  };
+  "db:get-database-path": {
+    req: void;
+    res: SuccessResponse<{ data: string }>;
+  };
+  "db:open-database-dir": {
+    req: void;
+    res: ApiResponse;
+  };
+
+  // CIF record operations - properly typed
+  "db:create-cif-record": {
+    req: Partial<CifRecord>;
+    res: CreateResponse;
+  };
+  "db:get-cif-record": {
+    req: number;
+    res: SuccessResponse<{ cifRecord: CifRecord }>;
+  };
+  "db:get-cif-records": {
+    req: void;
+    res: SuccessResponse<{ cifRecords: CifRecord[] }>;
+  };
+  "db:update-cif-record": {
+    req: [number, Partial<CifRecord>];
+    res: ApiResponse<boolean>;
+  };
+  "db:delete-cif-record": {
+    req: number;
+    res: ApiResponse<boolean>;
+  };
 };
 
 export type Channel = keyof ChannelMap;
@@ -113,6 +179,12 @@ export type Channel = keyof ChannelMap;
 export interface IPlatformStrategy {
   invoke<C extends Channel>(
     channel: C,
-    payload: ChannelMap[C]['req']
-  ): Promise<ChannelMap[C]['res']>;
+    payload: ChannelMap[C]["req"],
+  ): Promise<ChannelMap[C]["res"]>;
 }
+
+// Helper type for inferring response data
+export type ResponseData<C extends Channel> =
+  Extract<ChannelMap[C], { res: any }>["res"] extends ApiResponse<infer T>
+    ? T
+    : ChannelMap[C]["res"];
