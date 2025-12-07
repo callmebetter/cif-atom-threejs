@@ -6,7 +6,7 @@
         <h1 class="app-title">晶体学与微观图像科研辅助工具</h1>
       </div>
       <div class="header-right">
-        <el-button type="text" @click="toggleTheme">
+        <el-button link @click="toggleTheme">
           <el-icon><Moon v-if="!isDark" /><Sunny v-else /></el-icon>
         </el-button>
       </div>

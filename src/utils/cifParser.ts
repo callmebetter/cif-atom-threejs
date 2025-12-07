@@ -1,22 +1,29 @@
+// file: cif-parser.ts
+/* Minimal docs at top. Exported API:
+   - CifParser.parse(content, filename?) -> CifData (first data_ block)
+   - CifParser.parseAll(content, filename?) -> CifData[]
+*/
+
 export interface CifAtom {
   element: string
-  x: number
-  y: number
-  z: number
-  occupancy: number
-  thermal_factor: number
+  x: number | null
+  y: number | null
+  z: number | null
+  occupancy: number | null
+  thermal_factor: number | null
   label?: string
   symmetry?: string
+  [key: string]: any
 }
 
 export interface CifCellParameters {
-  a: number
-  b: number
-  c: number
-  alpha: number
-  beta: number
-  gamma: number
-  volume?: number
+  a: number | null
+  b: number | null
+  c: number | null
+  alpha: number | null
+  beta: number | null
+  gamma: number | null
+  volume?: number | null
 }
 
 export interface CifSymmetry {
@@ -25,10 +32,12 @@ export interface CifSymmetry {
   symmetry_cell_setting?: string
   symmetry_space_group_name_h_m?: string
   symmetry_equiv_pos_as_xyz?: string[]
+  [key: string]: any
 }
 
 export interface CifData {
   filename?: string
+  block_id?: string
   title?: string
   chemical_formula_sum?: string
   chemical_formula_moiety?: string
@@ -47,324 +56,416 @@ export interface CifData {
     parse_date: string
     parser_version: string
     warnings: string[]
+    raw_keys?: string[] // keys encountered in block
   }
+  _raw?: { [key: string]: any } // keep raw items if needed
 }
+
+type Token = string
 
 export class CifParser {
-  private static readonly VERSION = '1.0.0'
-  
+  private static readonly VERSION = '2.0.0-ts-refactor'
+
+  // Public: parse first data block
   static parse(content: string, filename?: string): CifData {
+    const blocks = this.parseAll(content, filename)
+    if (blocks.length === 0) {
+      throw new Error('No data_ blocks found in CIF content')
+    }
+    return blocks[0]
+  }
+
+  // Public: parse all data blocks
+  static parseAll(content: string, filename?: string): CifData[] {
     if (!content || typeof content !== 'string') {
-      throw new Error('CIF文件内容无效或为空')
+      throw new Error('Invalid or empty CIF content')
     }
 
-    try {
-      const data: CifData = {
-        atoms: [],
-        metadata: {
-          parse_date: new Date().toISOString(),
-          parser_version: this.VERSION,
-          warnings: []
-        }
+    const lines = content.split(/\r?\n/)
+    const parserState = new CIFTokenizer(lines)
+    const blocks: CifData[] = []
+
+    while (!parserState.eof()) {
+      const token = parserState.peekToken()
+      if (!token) break
+
+      if (token.toLowerCase().startsWith('data_')) {
+        const blockId = parserState.nextToken()!
+        const block = this.parseDataBlock(parserState, blockId, filename)
+        blocks.push(block)
+      } else {
+        // skip stray tokens until next data_
+        parserState.nextToken()
       }
-      
-      if (filename) {
-        data.filename = filename
-      }
-      
-      const lines = content.split('\n')
-      let inAtomLoop = false
-      let atomLabels: string[] = []
-      let atomData: string[][] = []
-      
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim()
-        
-        // 跳过空行和注释
-        if (!line || line.startsWith('#')) continue
-        
-        // 解析标题
-        if (line.startsWith('_data_name') || line.startsWith('_publ_section_title')) {
-          data.title = this.extractValue(line)
-          continue
-        }
-        
-        // 解析化学式
-        if (line.startsWith('_chemical_formula_sum')) {
-          data.chemical_formula_sum = this.extractValue(line)
-          continue
-        }
-        if (line.startsWith('_chemical_formula_moiety')) {
-          data.chemical_formula_moiety = this.extractValue(line)
-          continue
-        }
-        if (line.startsWith('_chemical_name_mineral')) {
-          data.chemical_name = this.extractValue(line)
-          continue
-        }
-        
-        // 解析晶系
-        if (line.startsWith('_symmetry_cell_setting') || line.startsWith('_space_group_crystal_system')) {
-          data.crystal_system = this.extractValue(line)
-          continue
-        }
-        
-        // 解析空间群
-        if (line.startsWith('_space_group_name_H-M') || line.startsWith('_symmetry_space_group_name_H-M')) {
-          if (!data.symmetry) data.symmetry = {}
-          data.symmetry.space_group_name_hm = this.extractValue(line)
-          continue
-        }
-        if (line.startsWith('_space_group_name_Hall')) {
-          if (!data.symmetry) data.symmetry = {}
-          data.symmetry.space_group_name_hall = this.extractValue(line)
-          continue
-        }
-        
-        // 解析晶胞参数
-        if (!data.cell_parameters) {
-          data.cell_parameters = { a: 0, b: 0, c: 0, alpha: 90, beta: 90, gamma: 90 }
-        }
-        
-        if (line.startsWith('_cell_length_a')) {
-          const value = parseFloat(this.extractValue(line))
-          if (!isNaN(value) && value > 0) {
-            data.cell_parameters.a = value
-          } else {
-            data.metadata!.warnings.push(`无效的晶胞参数a: ${this.extractValue(line)}`)
-          }
-          continue
-        }
-        if (line.startsWith('_cell_length_b')) {
-          const value = parseFloat(this.extractValue(line))
-          if (!isNaN(value) && value > 0) {
-            data.cell_parameters.b = value
-          } else {
-            data.metadata!.warnings.push(`无效的晶胞参数b: ${this.extractValue(line)}`)
-          }
-          continue
-        }
-        if (line.startsWith('_cell_length_c')) {
-          const value = parseFloat(this.extractValue(line))
-          if (!isNaN(value) && value > 0) {
-            data.cell_parameters.c = value
-          } else {
-            data.metadata!.warnings.push(`无效的晶胞参数c: ${this.extractValue(line)}`)
-          }
-          continue
-        }
-        if (line.startsWith('_cell_angle_alpha')) {
-          const value = parseFloat(this.extractValue(line))
-          if (!isNaN(value) && value > 0 && value <= 180) {
-            data.cell_parameters.alpha = value
-          } else {
-            data.metadata!.warnings.push(`无效的晶胞角度alpha: ${this.extractValue(line)}`)
-          }
-          continue
-        }
-        if (line.startsWith('_cell_angle_beta')) {
-          const value = parseFloat(this.extractValue(line))
-          if (!isNaN(value) && value > 0 && value <= 180) {
-            data.cell_parameters.beta = value
-          } else {
-            data.metadata!.warnings.push(`无效的晶胞角度beta: ${this.extractValue(line)}`)
-          }
-          continue
-        }
-        if (line.startsWith('_cell_angle_gamma')) {
-          const value = parseFloat(this.extractValue(line))
-          if (!isNaN(value) && value > 0 && value <= 180) {
-            data.cell_parameters.gamma = value
-          } else {
-            data.metadata!.warnings.push(`无效的晶胞角度gamma: ${this.extractValue(line)}`)
-          }
-          continue
-        }
-        
-        // 检测原子循环开始
-        if (line.startsWith('_atom_site_')) {
-          inAtomLoop = true
-          atomLabels.push(line)
-          continue
-        }
-        
-        // 解析原子数据
-        if (inAtomLoop && !line.startsWith('_') && line.length > 0) {
-          const parts = line.split(/\s+/).filter(p => p.length > 0)
-          if (parts.length >= 1) {
-            atomData.push(parts)
-          }
-          continue
-        }
-        
-        // 检测循环结束
-        if (inAtomLoop && line.startsWith('_') && !line.startsWith('_atom_site_')) {
-          inAtomLoop = false
-        }
-      }
-      
-      // 处理原子数据
-      if (atomData.length > 0) {
-        try {
-          data.atoms = this.parseAtomData(atomLabels, atomData, data.metadata!)
-        } catch (error) {
-          data.metadata!.warnings.push(`原子数据解析失败: ${error instanceof Error ? error.message : String(error)}`)
-        }
-      }
-      
-      // 计算晶胞体积
-      if (data.cell_parameters && data.cell_parameters.a > 0 && data.cell_parameters.b > 0 && data.cell_parameters.c > 0) {
-        try {
-          data.cell_parameters.volume = this.calculateCellVolume(data.cell_parameters)
-        } catch (error) {
-          data.metadata!.warnings.push(`晶胞体积计算失败: ${error instanceof Error ? error.message : String(error)}`)
-        }
-      }
-      
-      // 验证解析结果
-      if (data.atoms.length === 0) {
-        data.metadata!.warnings.push('未解析到原子数据，使用示例数据')
-        data.atoms = this.getExampleAtoms()
-      }
-      
-      if (!data.title) {
-        data.metadata!.warnings.push('未找到标题信息')
-      }
-      
-      if (!data.cell_parameters || data.cell_parameters.a === 0) {
-        data.metadata!.warnings.push('晶胞参数不完整')
-      }
-      
-      return data
-    } catch (error) {
-      throw new Error(`CIF文件解析失败: ${error instanceof Error ? error.message : String(error)}`)
     }
+
+    return blocks
   }
-  
-  private static extractValue(line: string): string {
-    const match = line.match(/^(?:_[^_\s]+(?:_[^_\s]+)*)\s+(.+)$/)
-    return match ? match[1].trim().replace(/['"]/g, '') : ''
-  }
-  
-  private static parseAtomData(labels: string[], data: string[][], metadata: { warnings: string[] }): CifAtom[] {
-    const atoms: CifAtom[] = []
-    
-    // 查找关键列的索引
-    const labelIndex = labels.findIndex(l => l.includes('_atom_site_label'))
-    const typeIndex = labels.findIndex(l => l.includes('_atom_site_type_symbol'))
-    const xIndex = labels.findIndex(l => l.includes('_atom_site_fract_x'))
-    const yIndex = labels.findIndex(l => l.includes('_atom_site_fract_y'))
-    const zIndex = labels.findIndex(l => l.includes('_atom_site_fract_z'))
-    const occIndex = labels.findIndex(l => l.includes('_atom_site_occupancy'))
-    const uIsoIndex = labels.findIndex(l => l.includes('_atom_site_U_iso_or_equiv'))
-    
-    for (const row of data) {
+
+  // Parse single data block given tokenizer after reading data_ id
+  private static parseDataBlock(tokenizer: CIFTokenizer, blockId: string, filename?: string): CifData {
+    const data: Partial<CifData> = {
+      filename,
+      block_id: blockId,
+      atoms: [],
+      _raw: {},
+      metadata: {
+        parse_date: new Date().toISOString(),
+        parser_version: this.VERSION,
+        warnings: []
+      }
+    }
+
+    // accumulate simple tags and loops until next data_ or EOF
+    while (!tokenizer.eof()) {
+      const tk = tokenizer.peekToken()
+      if (!tk) break
+      if (tk.toLowerCase().startsWith('data_')) break
+
+      if (tk.toLowerCase() === 'loop_') {
+        tokenizer.nextToken() // consume loop_
+        // collect labels (tokens starting with '_')
+        const labels: string[] = []
+        while (!tokenizer.eof() && tokenizer.peekToken() && tokenizer.peekToken()!.startsWith('_')) {
+          labels.push(tokenizer.nextToken()!)
+        }
+        if (labels.length === 0) {
+          data.metadata!.warnings.push('Found loop_ with no labels')
+          continue
+        }
+        // collect rows until next tag (startsWith '_') or next 'loop_' or 'data_' or EOF
+        const rows: Token[][] = []
+        while (!tokenizer.eof()) {
+          const next = tokenizer.peekToken()
+          if (!next) break
+          if (next === 'loop_' || next.startsWith('_') || next.toLowerCase().startsWith('data_')) break
+          // read one row: number of tokens equal to labels length (but rows may be split across lines)
+          const row: Token[] = []
+          for (let i = 0; i < labels.length; i++) {
+            const v = tokenizer.nextToken()
+            if (v === undefined) break
+            row.push(v)
+          }
+          if (row.length === 0) break
+          rows.push(row)
+        }
+        this.handleLoop(labels, rows, data, tokenizer)
+        continue
+      }
+
+      if (tk.startsWith('_')) {
+        // simple tag/value
+        const key = tokenizer.nextToken()!
+        const value = tokenizer.nextToken() ?? ''
+        this.assignSimpleTag(key, value, data)
+        continue
+      }
+
+      // If we encounter a semicolon-only multiline marker at non-start, tokenizer handles it as token ';...'
+      // Otherwise skip token
+      tokenizer.nextToken()
+    }
+
+    // Post-process: map extracted raw data into typed CifData
+    const cif: CifData = {
+      filename: data.filename,
+      block_id: data.block_id,
+      title: (data as any)._raw?._title || (data as any)._raw?._publ_section_title || undefined,
+      chemical_formula_sum: (data as any)._raw?._chemical_formula_sum,
+      chemical_formula_moiety: (data as any)._raw?._chemical_formula_moiety,
+      chemical_name: (data as any)._raw?._chemical_name_mineral || (data as any)._raw?._chemical_name_common,
+      crystal_system: (data as any)._raw?._symmetry_cell_setting || (data as any)._raw?._space_group_crystal_system,
+      cell_parameters: this.extractCellParams((data as any)._raw || {}),
+      symmetry: this.extractSymmetry((data as any)._raw || {}),
+      atoms: (data.atoms as CifAtom[]) || [],
+      metadata: data.metadata!,
+      _raw: data._raw
+    }
+
+    // compute cell volume if possible
+    if (cif.cell_parameters && cif.cell_parameters.a && cif.cell_parameters.b && cif.cell_parameters.c &&
+        cif.cell_parameters.alpha != null && cif.cell_parameters.beta != null && cif.cell_parameters.gamma != null) {
       try {
-        const atom: CifAtom = {
-          element: typeIndex >= 0 ? row[typeIndex] : row[labelIndex]?.substring(0, 1) || 'C',
-          x: xIndex >= 0 ? parseFloat(row[xIndex]) : 0,
-          y: yIndex >= 0 ? parseFloat(row[yIndex]) : 0,
-          z: zIndex >= 0 ? parseFloat(row[zIndex]) : 0,
-          occupancy: occIndex >= 0 ? parseFloat(row[occIndex]) : 1.0,
-          thermal_factor: uIsoIndex >= 0 ? parseFloat(row[uIsoIndex]) : 0.02
-        }
-        
-        if (labelIndex >= 0) {
-          atom.label = row[labelIndex]
-        }
-        
-        atoms.push(atom)
-      } catch (error) {
-        metadata.warnings.push(`解析原子数据时出错: ${row.join(' ')}`)
+        cif.cell_parameters.volume = this.calculateCellVolume(cif.cell_parameters)
+      } catch (err) {
+        cif.metadata!.warnings.push('Cell volume calculation failed')
+        cif.cell_parameters.volume = null
       }
     }
-    
+
+    // record encountered keys
+    cif.metadata!.raw_keys = Object.keys(cif._raw || {})
+
+    // sanity checks
+    if (cif.atoms.length === 0) {
+      cif.metadata!.warnings.push('No atoms parsed in block')
+    }
+
+    return cif
+  }
+
+  // Convert collected cell parameters (raw map) into typed object
+  private static extractCellParams(raw: { [k: string]: any }): CifCellParameters | undefined {
+    const maybe = (k: string) => {
+      const v = raw[k] ?? raw[k.toLowerCase()]
+      return v !== undefined ? this.parseNumericToken(String(v)) : null
+    }
+    const a = maybe('_cell_length_a') ?? maybe('_cell_length_a'.toLowerCase())
+    const b = maybe('_cell_length_b')
+    const c = maybe('_cell_length_c')
+    const alpha = maybe('_cell_angle_alpha')
+    const beta = maybe('_cell_angle_beta')
+    const gamma = maybe('_cell_angle_gamma')
+    if (a == null && b == null && c == null && alpha == null && beta == null && gamma == null) return undefined
+    return { a: a ?? null, b: b ?? null, c: c ?? null, alpha: alpha ?? null, beta: beta ?? null, gamma: gamma ?? null }
+  }
+
+  private static extractSymmetry(raw: { [k: string]: any }): CifSymmetry | undefined {
+    const s: CifSymmetry = {}
+    if (raw['_symmetry_space_group_name_H-M']) s.space_group_name_hm = String(raw['_symmetry_space_group_name_H-M']).replace(/['"]/g,'')
+    if (raw['_symmetry_space_group_name_Hall']) s.space_group_name_hall = String(raw['_symmetry_space_group_name_Hall']).replace(/['"]/g,'')
+    if (raw['_symmetry_cell_setting']) s.symmetry_cell_setting = String(raw['_symmetry_cell_setting']).replace(/['"]/g,'')
+    if (Object.keys(s).length === 0) return undefined
+    return s
+  }
+
+  // Place a simple _tag value into data._raw
+  private static assignSimpleTag(key: string, value: Token, data: Partial<CifData>) {
+    if (!data._raw) data._raw = {}
+    // keep original key-case but also lowercase alias
+    data._raw[key] = value
+    data._raw[key.toLowerCase()] = value
+  }
+
+  // Handle loop based on labels. Recognize atom loops by label prefix.
+  private static handleLoop(labels: string[], rows: Token[][], data: Partial<CifData>, tokenizer: CIFTokenizer) {
+    // Normalize labels
+    const normalized = labels.map(l => l.trim())
+
+    // store raw loop for later debugging
+    if (!data._raw) data._raw = {}
+    const loopId = normalized.join('|')
+    data._raw[`loop:${loopId}`] = { labels: normalized, rows }
+
+    // Heuristic: atom site loop (labels start with _atom_site_)
+    if (normalized.some(l => l.toLowerCase().startsWith('_atom_site_'))) {
+      const atoms = this.parseAtomLoop(normalized, rows, data.metadata!)
+      data.atoms = (data.atoms || []).concat(atoms)
+      return
+    }
+
+    // Other loop types can be captured raw
+    // store each label values as arrays into _raw
+    normalized.forEach((lab, idx) => {
+      data._raw![lab] = rows.map(r => r[idx] ?? null)
+    })
+  }
+
+  // Parse atom loop: label mapping -> build CifAtom objects
+  private static parseAtomLoop(labels: string[], rows: Token[][], metadata: NonNullable<CifData['metadata']>): CifAtom[] {
+    // create mapping from label -> index
+    const idxByKey: { [key: string]: number } = {}
+    labels.forEach((l, i) => { idxByKey[l.toLowerCase()] = i })
+
+    const get = (row: Token[], keyCandidates: string[]): string | null => {
+      for (const candidate of keyCandidates) {
+        const idx = idxByKey[candidate.toLowerCase()]
+        if (idx !== undefined && row[idx] !== undefined) return row[idx]
+      }
+      return null
+    }
+
+    const atoms: CifAtom[] = []
+    for (const row of rows) {
+      try {
+        const label = get(row, ['_atom_site_label']) || undefined
+        const typeSym = get(row, ['_atom_site_type_symbol', '_atom_site_type']) || undefined
+        const xtok = get(row, ['_atom_site_fract_x', '_atom_site_Cartn_x'])
+        const ytok = get(row, ['_atom_site_fract_y', '_atom_site_Cartn_y'])
+        const ztok = get(row, ['_atom_site_fract_z', '_atom_site_Cartn_z'])
+        const occTok = get(row, ['_atom_site_occupancy'])
+        const uTok = get(row, ['_atom_site_U_iso_or_equiv', '_atom_site_B_iso_or_equiv'])
+
+        const atom: CifAtom = {
+          element: (typeSym ?? (label ? label[0] : 'C')) as string,
+          x: xtok ? this.parseNumericToken(xtok) : null,
+          y: ytok ? this.parseNumericToken(ytok) : null,
+          z: ztok ? this.parseNumericToken(ztok) : null,
+          occupancy: occTok ? this.parseNumericToken(occTok) : null,
+          thermal_factor: uTok ? this.parseNumericToken(uTok) : null
+        }
+
+        if (label) atom.label = label
+        const sym = get(row, ['_atom_site_symmetry_multiplicity', '_atom_site_symmetry_ops', '_atom_site_site_symmetry'])
+        if (sym) atom.symmetry = sym
+
+        // include any extra fields present in loop row
+        labels.forEach((lab, idx) => {
+          const key = lab.replace(/^_/, '')
+          if (!atom.hasOwnProperty(key) && row[idx] !== undefined) {
+            atom[key] = row[idx]
+          }
+        })
+
+        atoms.push(atom)
+      } catch (err) {
+        metadata.warnings.push(`Failed to parse atom row: ${row.join(' ')}`)
+      }
+    }
+
     return atoms
   }
-  
+
+  // Parse numeric tokens handling uncertainties and missing values
+  private static parseNumericToken(tok: string): number | null {
+    if (tok === '.' || tok === '?' || tok === '' || tok === undefined || tok === null) return null
+    // semicolon multi-line tokens start with ';' are already handled; here we just sanitize
+    let s = String(tok).trim()
+    // remove surrounding quotes
+    if ((s.startsWith("'") && s.endsWith("'")) || (s.startsWith('"') && s.endsWith('"'))) {
+      s = s.substring(1, s.length - 1)
+    }
+    // remove uncertainty parentheses 1.234(5) -> 1.234
+    s = s.replace(/\([^\)]*\)/g, '')
+    // some CIFs use comma as decimal (rare) - don't auto convert; keep parseFloat standard
+    const n = Number.parseFloat(s)
+    if (Number.isFinite(n)) return n
+    // try integer parse
+    const ni = Number.parseInt(s, 10)
+    if (!Number.isNaN(ni)) return ni
+    return null
+  }
+
+  // Compute cell volume
   private static calculateCellVolume(cell: CifCellParameters): number {
-    const { a, b, c, alpha, beta, gamma } = cell
-    const alphaRad = (alpha * Math.PI) / 180
-    const betaRad = (beta * Math.PI) / 180
-    const gammaRad = (gamma * Math.PI) / 180
-    
-    const volume = a * b * c * Math.sqrt(
-      1 - Math.cos(alphaRad) * Math.cos(alphaRad) -
-      Math.cos(betaRad) * Math.cos(betaRad) -
-      Math.cos(gammaRad) * Math.cos(gammaRad) +
-      2 * Math.cos(alphaRad) * Math.cos(betaRad) * Math.cos(gammaRad)
+    const a = cell.a ?? 0
+    const b = cell.b ?? 0
+    const c = cell.c ?? 0
+    const alpha = (cell.alpha ?? 90) * Math.PI / 180
+    const beta = (cell.beta ?? 90) * Math.PI / 180
+    const gamma = (cell.gamma ?? 90) * Math.PI / 180
+    const val = a * b * c * Math.sqrt(
+      1 - Math.cos(alpha) * Math.cos(alpha) -
+      Math.cos(beta) * Math.cos(beta) -
+      Math.cos(gamma) * Math.cos(gamma) +
+      2 * Math.cos(alpha) * Math.cos(beta) * Math.cos(gamma)
     )
-    
-    return Math.round(volume * 1000) / 1000
-  }
-  
-  private static getExampleAtoms(): CifAtom[] {
-    return [
-      { element: 'C', x: 0.123, y: 0.456, z: 0.789, occupancy: 1.0, thermal_factor: 0.02, label: 'C1' },
-      { element: 'H', x: 0.234, y: 0.567, z: 0.890, occupancy: 1.0, thermal_factor: 0.03, label: 'H1' },
-      { element: 'O', x: 0.345, y: 0.678, z: 0.901, occupancy: 1.0, thermal_factor: 0.025, label: 'O1' },
-      { element: 'N', x: 0.456, y: 0.789, z: 0.012, occupancy: 1.0, thermal_factor: 0.022, label: 'N1' }
-    ]
-  }
-  
-  static validateCifFile(content: string): { valid: boolean; errors: string[] } {
-    const errors: string[] = []
-    
-    if (!content || content.trim().length === 0) {
-      errors.push('文件内容为空')
-      return { valid: false, errors }
-    }
-    
-    const lines = content.split('\n')
-    let hasDataBlock = false
-    let hasAtomSite = false
-    
-    for (const line of lines) {
-      const trimmed = line.trim()
-      
-      if (trimmed.startsWith('data_')) {
-        hasDataBlock = true
-      }
-      
-      if (trimmed.startsWith('_atom_site_')) {
-        hasAtomSite = true
-      }
-    }
-    
-    if (!hasDataBlock) {
-      errors.push('缺少数据块 (data_)')
-    }
-    
-    if (!hasAtomSite) {
-      errors.push('缺少原子位置信息 (_atom_site_)')
-    }
-    
-    return { valid: errors.length === 0, errors }
-  }
-  
-  static getElementColor(element: string): string {
-    const colors: { [key: string]: string } = {
-      'H': '#FFFFFF', 'He': '#D9FFFF', 'Li': '#CC80FF', 'Be': '#C2FF00',
-      'B': '#FFB5B5', 'C': '#909090', 'N': '#3050F8', 'O': '#FF0D0D',
-      'F': '#90E050', 'Ne': '#B3E3F5', 'Na': '#AB5CF2', 'Mg': '#8AFF00',
-      'Al': '#BFA6A6', 'Si': '#F0C8A0', 'P': '#FF8000', 'S': '#FFFF30',
-      'Cl': '#1FF01F', 'Ar': '#80D1E3', 'K': '#8F40D4', 'Ca': '#3DFF00',
-      'Fe': '#E06633', 'Cu': '#C88033', 'Zn': '#7D80B0', 'Au': '#FFD123'
-    }
-    return colors[element] || '#FF69B4'
-  }
-  
-  static getAtomicRadius(element: string): number {
-    const radii: { [key: string]: number } = {
-      'H': 0.31, 'He': 0.28, 'Li': 1.28, 'Be': 0.96, 'B': 0.85,
-      'C': 0.76, 'N': 0.71, 'O': 0.66, 'F': 0.57, 'Ne': 0.58,
-      'Na': 1.66, 'Mg': 1.41, 'Al': 1.21, 'Si': 1.11, 'P': 1.07,
-      'S': 1.05, 'Cl': 1.02, 'Ar': 1.06, 'K': 2.03, 'Ca': 1.76,
-      'Fe': 1.26, 'Cu': 1.28, 'Zn': 1.34, 'Au': 1.44
-    }
-    return radii[element] || 1.0
+    // round to 6 decimals
+    return Math.round(val * 1e6) / 1e6
   }
 }
 
-// Export a default instance for convenience
-export const cifParser = new CifParser()
+/* ---------- Helper: tokenizer that understands CIF token rules:
+   - tokens separated by whitespace
+   - quoted tokens (single/double)
+   - semicolon multiline values: a line that begins with ';' starts a value which continues
+     until a line that is exactly ';' (RFC-like)
+   - preserves order and returns tokens one by one
+*/
+class CIFTokenizer {
+  private pos = 0
+  private tokens: Token[] = []
+
+  constructor(private lines: string[]) {
+    this.tokenize()
+  }
+
+  eof(): boolean {
+    return this.pos >= this.tokens.length
+  }
+
+  peekToken(): Token | null {
+    return this.tokens[this.pos] ?? null
+  }
+
+  nextToken(): Token | undefined {
+    const t = this.tokens[this.pos]
+    if (t === undefined) return undefined
+    this.pos++
+    return t
+  }
+
+  private tokenize() {
+    const out: Token[] = []
+    const L = this.lines.length
+    let i = 0
+    while (i < L) {
+      const raw = this.lines[i]
+      if (raw === undefined) { i++; continue }
+      const line = raw.replace(/\r?\n$/, '')
+
+      // semicolon multiline: line starting with ';' (leading whitespace allowed)?
+      if (/^\s*;/.test(line)) {
+        // start of multiline value: consume until a line that is exactly ';' (possibly with whitespace)
+        const contentLines: string[] = []
+        // If the line is exactly ';' then empty content until next ';' line
+        // The convention: semicolon at line start marks open; everything up to next line starting with ';' is content
+        // We'll remove leading initial ';'
+        let first = line.replace(/^\s*;/, '')
+        // if the first line had content after the initial ';', include it
+        if (first.length > 0) contentLines.push(first)
+        i++
+        let closed = false
+        while (i < L) {
+          const l2 = this.lines[i]
+          if (/^\s*;/.test(l2)) { closed = true; break }
+          contentLines.push(l2)
+          i++
+        }
+        // advance past closing ';' if present
+        if (i < L && /^\s*;/.test(this.lines[i])) {
+          i++
+        }
+        out.push(contentLines.join('\n'))
+        continue
+      }
+
+      // otherwise parse token-by-token on the line
+      let j = 0
+      const len = line.length
+      while (j < len) {
+        // skip whitespace
+        if (/\s/.test(line[j])) { j++; continue }
+
+        // comment: line starting with '#' -> skip rest of line
+        if (line[j] === '#') break
+
+        // quoted token
+        if (line[j] === "'" || line[j] === '"') {
+          const quote = line[j]
+          j++
+          let buf = ''
+          while (j < len) {
+            if (line[j] === quote) {
+              // handle escaped quote by doubling (CIF uses '' to represent ' inside single-quoted string)
+              if (j + 1 < len && line[j + 1] === quote) {
+                buf += quote
+                j += 2
+                continue
+              }
+              j++
+              break
+            }
+            buf += line[j]
+            j++
+          }
+          out.push(buf)
+          continue
+        }
+
+        // unquoted token: read until whitespace or comment char
+        let tok = ''
+        while (j < len && !/\s/.test(line[j])) {
+          if (line[j] === '#') break
+          tok += line[j]
+          j++
+        }
+        out.push(tok)
+      }
+
+      i++
+    }
+
+    this.tokens = out
+  }
+}

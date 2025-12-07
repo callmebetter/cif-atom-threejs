@@ -32,6 +32,13 @@ const electronAPI: ElectronAPI = {
     getAnalysisRecords: (projectId, analysisType) => ipcRenderer.invoke('db:get-analysis-records', projectId, analysisType),
     deleteAnalysisRecord: (id) => ipcRenderer.invoke('db:delete-analysis-record', id),
 
+    // CIF record operations
+    createCifRecord: (record) => ipcRenderer.invoke('db:create-cif-record', record),
+    getCifRecord: (id) => ipcRenderer.invoke('db:get-cif-record', id),
+    getCifRecords: () => ipcRenderer.invoke('db:get-cif-records'),
+    updateCifRecord: (id, updates) => ipcRenderer.invoke('db:update-cif-record', id, updates),
+    deleteCifRecord: (id) => ipcRenderer.invoke('db:delete-cif-record', id),
+
     // Settings operations
     getSetting: (key) => ipcRenderer.invoke('db:get-setting', key),
     setSetting: (key, value) => ipcRenderer.invoke('db:set-setting', key, value),
