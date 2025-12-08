@@ -7,7 +7,8 @@
 4. [API 参考](#api-参考)
 5. [开发指南](#开发指南)
 6. [测试指南](#测试指南)
-7. [部署指南](#部署指南)
+7. [调试指南](#调试指南)
+8. [部署指南](#部署指南)
 
 ## 项目架构
 
@@ -95,11 +96,11 @@ VITE_API_BASE_URL=http://localhost:5173
 
 #### 4. 启动开发服务器
 ```bash
-# 终端 1: 启动 Vite 开发服务器
-npm run dev:vite
+# 启动标准开发服务器
+npm run dev
 
-# 终端 2: 启动 Electron 应用
-npm run dev:electron
+# 或启动带源映射的调试服务器
+npm run dev:debug
 ```
 
 ### VS Code 配置
@@ -177,6 +178,30 @@ src/
 └── main.ts                   # Vue 应用入口
 ```
 
+### 本地存储目录结构
+
+**应用本地数据目录结构**：
+
+```
+your-app-appdata/          # 应用本地数据目录（根据操作系统自动定位）
+├── data/                  # 核心数据存储
+│   ├── uploads/           # 原始上传文件（CIF/TIF/ZIP）
+│   │   ├── sample.cif     # 用户上传的原始 CIF 文件
+│   │   └── sample_20240601_1200.cif # 重复上传的同名文件（带时间戳）
+│   ├── processed/         # 处理后的中间文件（如 8-bit TIF、3D 模型缓存）
+│   │   └── processed_8bit.tif
+│   └── crystal_data.db    # SQLite 数据库（存储解析结果与文件路径关联）
+└── logs/                  # 日志文件
+    └── python_calls.log   # Python 调用日志
+```
+
+**文件命名规则**：保留原始文件名（如 `sample.cif`），若重复上传同名文件，则追加时间戳（如 `sample_20240601_1200.cif`）。
+
+**关键操作**：
+- **保存原始 CIF 文件**：用户上传的 CIF 文件首先被复制到 `uploads/` 目录
+- **处理后的文件**：解析或处理后的文件存储到 `processed/` 目录
+- **关联数据库记录**：解析完成后，将文件的本地路径与解析数据一起存入数据库
+
 ### 核心模块说明
 
 #### CIF 解析器 (cifParser.ts)
@@ -208,9 +233,88 @@ export class DatabaseService {
   getProject(id: number): Promise<Project | null>
   updateProject(id: number, updates: Partial<Project>): Promise<boolean>
   deleteProject(id: number): Promise<boolean>
+  
+  // CIF 相关操作
+  createCifRecord(record: CifRecordData): Promise<number>
+  getCifRecord(id: number): Promise<CifRecord | null>
+  getCifRecords(projectId?: number): Promise<CifRecord[]>
+  deleteCifRecord(id: number): Promise<boolean>
   // ... 其他数据库操作方法
 }
 ```
+
+#### 数据库表结构
+
+**核心表结构**：
+
+| 表名 | 字段 | 类型 | 描述 | 约束 |  
+|------|------|------|------|------|  
+| `cif_records` | `id` | INTEGER PRIMARY KEY AUTOINCREMENT | 记录唯一标识 | NOT NULL |  
+|  | `file_name` | TEXT | 原始 CIF 文件名（如 `sample.cif`） | NOT NULL |  
+|  | `file_path` | TEXT | CIF 原始文件在应用本地目录的存储路径（如 `/data/uploads/sample.cif`） | NOT NULL |  
+|  | `parsed_atoms` | TEXT | 解析后的原子数据（JSON 格式，包含元素、坐标等） | NOT NULL |  
+|  | `parsed_lattice` | TEXT | 解析后的晶胞参数（JSON 格式，包含 a/b/c/α/β/γ） | NOT NULL |  
+|  | `space_group` | TEXT | 空间群（可能为 NULL，若 CIF 未定义） | - |  
+|  | `parse_status` | TEXT | 解析状态（`success`/`failed`/`partial`） | NOT NULL |  
+|  | `parse_error` | TEXT | 解析失败时的错误信息（如字段缺失、格式错误） | - |  
+|  | `created_at` | DATETIME DEFAULT CURRENT_TIMESTAMP | 记录创建时间 | - |  
+|  | `project_id` | INTEGER | 关联的项目 ID（外键） | - |
+
+### CIF 数据工作流
+
+#### 端到端处理流程
+
+1. **文件上传**：用户通过界面上传 CIF 文件
+2. **文件保存**：文件被复制到应用本地 `uploads/` 目录，避免直接操作原始文件
+3. **CIF 解析**：使用 `CifParser` 解析文件内容，提取原子坐标、晶胞参数和空间群等信息
+4. **数据序列化**：将解析后的结构化数据转换为 JSON 格式
+5. **数据库存储**：将解析结果和文件信息存入 `cif_records` 表
+6. **关联管理**：建立数据库记录与本地文件路径的关联
+
+#### 代码示例：CIF 数据保存流程
+
+```typescript
+// 前端或主进程（解析完成后调用）
+async function saveCifDataToDb(parsedData: ParsedCifData, originalFilePath: string) {
+  const db = await openSqliteDb(); // 打开本地 SQLite 数据库
+  const fileName = path.basename(originalFilePath);
+  const targetPath = path.join(appDataDir, 'uploads', fileName); // 复制文件到本地目录
+
+  // 1. 将原始 CIF 文件复制到本地 uploads 目录
+  fs.copyFileSync(originalFilePath, targetPath);
+
+  // 2. 构造 JSON 格式的原子与晶胞数据
+  const parsedAtomsJson = JSON.stringify(parsedData.atoms);
+  const parsedLatticeJson = JSON.stringify(parsedData.latticeParams);
+
+  // 3. 插入数据库记录
+  const query = `
+    INSERT INTO cif_records 
+    (file_name, file_path, parsed_atoms, parsed_lattice, space_group, parse_status) 
+    VALUES (?, ?, ?, ?, ?, ?)
+  `;
+  await db.run(query, [
+    fileName,
+    targetPath,
+    parsedAtomsJson,
+    parsedLatticeJson,
+    parsedData.spaceGroup || null,
+    'success' // 假设解析成功
+  ]);
+}
+
+// 示例：调用保存函数（在 CIF 解析完成后）
+const parsedCifData = await parseCifWithSdk(cifFile); // 前端 SDK 解析
+await saveCifDataToDb(parsedCifData, cifFile.path); // 存储到本地目录与数据库
+```
+
+#### 关键设计要点
+
+- **数据完整性**：确保文件复制和数据库插入操作要么全部成功，要么全部失败（原子操作）
+- **文件安全**：从不直接修改用户上传的原始文件，始终操作副本
+- **可追溯性**：通过 `file_path` 字段可以快速定位原始文件
+- **查询效率**：使用 JSON 格式存储结构化数据，平衡查询效率与开发便利性
+- **状态管理**：通过 `parse_status` 字段区分成功/失败记录，支持后续统计或错误排查
 
 ## API 参考
 
@@ -242,6 +346,147 @@ window.electronAPI.database.getAllProjects(): Promise<DatabaseResult<Project[]>>
 window.electronAPI.database.createAnalysisRecord(record: AnalysisData): Promise<DatabaseResult<AnalysisRecord>>
 window.electronAPI.database.getAnalysisRecords(projectId?: number): Promise<DatabaseResult<AnalysisRecord[]>>
 ```
+
+## IPC 通信设置指南
+
+### 概述
+IPC (进程间通信) 用于 Electron 主进程和渲染进程之间的通信。本项目采用结构化方法，通过 SDK 层来处理 IPC 通信，确保一致性和可维护性。
+
+### 添加新 IPC 通道的步骤
+
+#### 1. 更新平台类型定义
+在 `src/platform/types.ts` 中的 `ChannelMap` 接口添加新通道：
+
+```typescript
+export type ChannelMap = {
+  // 现有通道...
+  'new-channel': {
+    req: RequestType;  // 请求参数类型
+    res: ResponseType;  // 响应类型
+  };
+};
+```
+
+#### 2. 添加到 SDK 操作
+在 `src/platform/sdk.ts` 中的相应操作对象添加新方法：
+
+```typescript
+export const newOperations = {
+  newMethod: (params: RequestType) => safeInvoke('new-channel', params),
+};
+```
+
+#### 3. 实现 IPC 处理器
+在 `electron/ipc-handlers.ts` 中添加 IPC 处理器：
+
+```typescript
+ipcMain.handle('new-channel', async (_, params) => {
+  try {
+    // 实现业务逻辑
+    const result = await someOperation(params);
+    return { success: true, data: result };  // 注意使用 data 属性
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+});
+```
+
+#### 4. 更新预加载脚本（如有需要）
+如果通道需要直接暴露（不通过 SDK），更新 `electron/preload.ts`：
+
+```typescript
+const electronAPI = {
+  // 现有方法...
+  newMethod: (params) => ipcRenderer.invoke('new-channel', params),
+};
+```
+
+#### 5. 在组件中使用
+在 Vue 组件中导入并使用 SDK 方法：
+
+```typescript
+import { newOperations } from '@/platform/sdk';
+
+// 在组件逻辑中使用
+const result = await newOperations.newMethod(params);
+if (result.success) {
+  // 处理成功结果
+  console.log(result.data);
+} else {
+  // 处理错误
+  console.error(result.error);
+}
+```
+
+### 最佳实践
+
+1. **始终使用 SDK 层**：避免直接调用 `window.electronAPI`，通过 SDK 层调用确保一致性和错误处理
+2. **统一响应格式**：所有 IPC 响应必须遵循 `{ success: boolean, data?: T, error?: string }` 格式
+3. **类型安全**：为所有 IPC 通信使用正确的 TypeScript 类型
+4. **错误处理**：在 IPC 处理器中捕获并返回错误，在组件中处理错误
+5. **重启开发服务器**：修改 IPC 处理器后，需要重启开发服务器才能生效
+6. **命名规范**：
+   - 通道名称使用 `kebab-case` 格式（如 `db:get-database-path`）
+   - SDK 方法使用 `camelCase` 格式（如 `getDatabasePath`）
+
+### 示例：添加数据库路径获取功能
+
+以下是实现 `getDatabasePath` 功能的完整示例：
+
+1. **更新类型定义** (`src/platform/types.ts`)
+```typescript
+export type ChannelMap = {
+  // ... 现有通道
+  'db:get-database-path': { req: void; res: ApiResponse<string> };
+};
+```
+
+2. **添加 SDK 方法** (`src/platform/sdk.ts`)
+```typescript
+export const databaseOperations = {
+  // ... 现有方法
+  getDatabasePath: () => safeInvoke('db:get-database-path', void 0),
+};
+```
+
+3. **实现 IPC 处理器** (`electron/ipc-handlers.ts`)
+```typescript
+ipcMain.handle('db:get-database-path', async () => {
+  try {
+    const dbPath = db.getDatabasePath();
+    return { success: true, data: dbPath };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+});
+```
+
+4. **在组件中使用**
+```typescript
+import { databaseOperations } from '@/platform/sdk';
+
+const initData = async () => {
+  const dbPathResult = await databaseOperations.getDatabasePath();
+  if (dbPathResult.success && dbPathResult.data) {
+    databasePath.value = dbPathResult.data;
+  }
+};
+```
+
+### 现有 SDK 操作
+
+#### 文件操作 (`fileOperations`)
+- `selectFile(options: unknown)`: 选择文件
+- `readFile(filePath: string)`: 读取文件
+- `saveFile(fileName: string, data: ArrayBuffer)`: 保存文件
+- `initAppData()`: 初始化应用数据目录
+- `getPlatformInfo()`: 获取平台信息
+
+#### 数据库操作 (`databaseOperations`)
+- **项目操作**: `createProject`, `getProject`, `getAllProjects`, `updateProject`, `deleteProject`
+- **分析记录操作**: `createAnalysisRecord`, `getAnalysisRecords`, `deleteAnalysisRecord`
+- **设置操作**: `getSetting`, `setSetting`, `getAllSettings`
+- **数据库维护**: `getStats`, `getDatabasePath`, `backup`, `vacuum`
 
 ### 类型定义
 
@@ -618,6 +863,276 @@ export default defineConfig({
 })
 ```
 
+## 调试指南
+
+### 源映射配置
+
+为了更好地调试应用程序中的错误，我们已经启用了源映射功能。这允许您在浏览器开发者工具中看到原始的 TypeScript 和 Vue 代码，而不是编译后的 JavaScript。
+
+#### 开发模式下的源映射
+
+在开发过程中，以下配置已经启用以提供完整的源映射支持：
+
+1. **Vite 配置** (`vite.config.ts`):
+   ```typescript
+   export default defineConfig({
+     build: {
+       sourcemap: true,
+       // ...
+     },
+     esbuild: {
+       sourcemap: true,
+     },
+     server: {
+       sourcemapIgnoreList: false,
+       // ...
+     }
+   })
+   ```
+
+2. **Electron-Vite 配置** (`electron.vite.config.ts`):
+   ```typescript
+   export default defineConfig({
+     main: {
+       build: {
+         sourcemap: true,
+         // ...
+       }
+     },
+     preload: {
+       build: {
+         sourcemap: true,
+         // ...
+       }
+     },
+     renderer: {
+       build: {
+         sourcemap: true,
+         // ...
+       },
+       server: {
+         sourcemapIgnoreList: false,
+         // ...
+       },
+       esbuild: {
+         sourcemap: true,
+       }
+     }
+   })
+   ```
+
+### 调试命令
+
+我们提供了几种不同的调试方式来帮助您诊断和解决问题：
+
+1. **标准开发模式**:
+   ```bash
+   npm run dev
+   ```
+   这是正常的开发模式，带有基本的源映射支持。
+
+2. **增强调试模式**:
+   ```bash
+   npm run dev:debug
+   ```
+   此模式启用了额外的调试选项，包括：
+   - Node.js 源映射支持
+   - Electron 日志记录
+   - 详细的堆栈跟踪
+
+3. **Vue 错误扫描**:
+   ```bash
+   npm run debug:vue
+   ```
+   此工具专门扫描潜在的 Vue 错误，例如 "Cannot read properties of null" 错误，并提供修复建议。
+
+### 调试 "Cannot read properties of null" 错误
+
+这类错误通常发生在试图访问未定义或为空的对象属性时。以下是一些常见的解决方案：
+
+1. **使用可选链操作符**:
+   ```javascript
+   // 错误的做法
+   const value = object.property.subProperty
+   
+   // 正确的做法
+   const value = object?.property?.subProperty
+   ```
+
+2. **检查元素存在性**:
+   ```javascript
+   // 错误的做法
+   document.getElementById("myId").innerHTML = "text"
+   
+   // 正确的做法
+   const el = document.getElementById("myId")
+   if (el) el.innerHTML = "text"
+   ```
+
+3. **正确使用模板引用**:
+   ```javascript
+   // 错误的做法
+   this.$refs.myComponent.method()
+   
+   // 正确的做法
+   this.$refs.myComponent?.method()
+   ```
+
+### 使用浏览器开发者工具
+
+1. **打开开发者工具**:
+   - 在 Electron 应用中按 `Ctrl+Shift+I` (Windows/Linux) 或 `Cmd+Option+I` (Mac)
+   - 或通过菜单: View → Toggle Developer Tools
+
+2. **查看源代码**:
+   - 转到 "Sources" 标签页
+   - 在左侧文件树中找到您的源文件（现在应该能看到 .vue 和 .ts 文件）
+   - 设置断点并逐步执行代码
+
+3. **检查控制台错误**:
+   - 转到 "Console" 标签页
+   - 查看详细的错误消息和堆栈跟踪
+   - 点击堆栈跟踪中的文件链接可以直接跳转到对应源代码位置
+
+### 性能监控
+
+我们还提供了性能监控脚本，可以帮助识别性能瓶颈：
+
+```bash
+npm run dev:analyze-deep
+```
+
+此命令将启动深度性能分析，提供有关构建过程和运行时性能的详细报告。
+
+## Python 集成
+
+### 概述
+
+本项目集成了 Python 脚本用于处理复杂的晶体学计算和图像处理任务。为确保 Python 调用的稳定性和健壮性，实现了环境检测、失败重试、超时控制等机制。
+
+### Python 环境检测
+
+在调用 Python 脚本之前，应用会检查 Python 环境是否可用：
+
+```typescript
+// 主进程（main.ts）：检查 Python 是否可用
+function checkPythonEnvironment(): { hasPython: boolean; version?: string } {
+  try {
+    const { execSync } = require('child_process');
+    const versionOutput = execSync('python --version').toString(); // 或 'python3 --version'
+    const versionMatch = versionOutput.match(/Python (\d+\.\d+\.\d+)/);
+    return { 
+      hasPython: true, 
+      version: versionMatch ? versionMatch[1] : 'unknown' 
+    };
+  } catch (error) {
+    return { hasPython: false }; // Python 未安装或不在 PATH 中
+  }
+}
+
+// 使用示例（应用启动时检查）
+const pythonCheck = checkPythonEnvironment();
+if (!pythonCheck.hasPython) {
+  console.error('Python 环境未找到，请确保已安装 Python 3.8+ 并配置环境变量');
+  // 可选：在前端提示用户“当前系统未检测到 Python，请联系管理员安装”
+}
+```
+
+### Python 调用与失败重试逻辑
+
+```typescript
+// 主进程（main.ts）：调用 Python 脚本（带重试机制）
+async function callPythonScriptWithRetry(
+  scriptPath: string, 
+  args: string[], 
+  maxRetries: number = 3, 
+  timeoutMs: number = 10000 // 单次调用超时 10 秒
+): Promise<{ status: 'success' | 'error'; data?: any; error?: string }> {
+  let lastError: string | undefined;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const { spawn } = require('child_process');
+      const pythonProcess = spawn('python', [scriptPath, ...args], { 
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: timeoutMs // 设置超时
+      });
+
+      let resultData = '';
+      let errorData = '';
+
+      pythonProcess.stdout.on('data', (data) => { resultData += data.toString(); });
+      pythonProcess.stderr.on('data', (data) => { errorData += data.toString(); });
+
+      return new Promise((resolve) => {
+        pythonProcess.on('close', (code) => {
+          if (code === 0) {
+            try {
+              const parsed = JSON.parse(resultData);
+              resolve({ status: 'success', data: parsed });
+            } catch (e) {
+              resolve({ status: 'error', error: 'Python 输出不是有效的 JSON' });
+            }
+          } else {
+            const errorMsg = errorData || `Python 进程退出码: ${code}`;
+            lastError = errorMsg;
+            if (attempt < maxRetries) {
+              console.warn(`Python 调用失败（尝试 ${attempt}/${maxRetries}），重试中... 错误: ${errorMsg}`);
+              setTimeout(() => {}, 1000 * attempt); // 指数退避（可选）
+            } else {
+              resolve({ status: 'error', error: `Python 调用最终失败: ${errorMsg}` });
+            }
+          }
+        });
+
+        pythonProcess.on('error', (err) => {
+          lastError = `Python 进程启动错误: ${err.message}`;
+          if (attempt < maxRetries) {
+            console.warn(`Python 启动失败（尝试 ${attempt}/${maxRetries}），重试中... 错误: ${lastError}`);
+            setTimeout(() => {}, 1000 * attempt);
+          } else {
+            resolve({ status: 'error', error: `Python 启动最终失败: ${lastError}` });
+          }
+        });
+      });
+
+    } catch (error) {
+      lastError = `Python 调用异常: ${error instanceof Error ? error.message : String(error)}`;
+      if (attempt < maxRetries) {
+        console.warn(`Python 调用异常（尝试 ${attempt}/${maxRetries}），重试中... 错误: ${lastError}`);
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // 延迟后重试
+      }
+    }
+  }
+
+  return { status: 'error', error: lastError || '未知错误' };
+}
+```
+
+### 关键健壮性设计点
+
+- **超时控制**：单次 Python 调用设置超时（如 10 秒），避免因脚本死锁导致主进程阻塞。
+- **指数退避重试**：重试间隔逐渐增加（如第 1 次 1 秒，第 2 次 2 秒），减少短时间内重复失败的概率。
+- **错误分类**：区分"Python 未安装"（环境问题）、"脚本语法错误"（代码问题）、"参数传递错误"（调用问题），返回明确的错误类型给用户。
+- **日志记录**：记录每次 Python 调用的详细日志（如参数、输出、错误），便于后续排查（可存储到本地日志文件）。
+
+### 使用示例
+
+```typescript
+// 调用 TIF 处理脚本
+const result = await callPythonScriptWithRetry(
+  path.join(__dirname, 'python_scripts', 'process_tif.py'),
+  [tifFilePath, JSON.stringify(tifParams)]
+);
+
+if (result.status === 'success') {
+  console.log('处理成功，输出路径:', result.data.outputPath);
+} else {
+  console.error('处理失败:', result.error);
+  // 前端提示用户"TIF 处理失败，请检查文件格式或联系支持"
+}
+```
+
 ## 部署指南
 
 ### 构建配置
@@ -705,6 +1220,9 @@ export default defineConfig({
 ```json
 {
   "scripts": {
+    "dev": "electron-vite dev",
+    "dev:debug": "node scripts/debug-dev.cjs",
+    "debug:vue": "node scripts/vue-error-debugger.js",
     "dev:vite": "vite",
     "dev:electron": "wait-on http://localhost:5173 && electron .",
     "build": "vue-tsc --noEmit && vite build",

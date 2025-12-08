@@ -6,8 +6,9 @@
     "moduleResolution": "NodeNext",
     "noUnusedLocals": true,
     "allowSyntheticDefaultImports": true,
-    "typeRoots": ["./node_modules/@types", "./node_modules"]
+    "typeRoots": ["./node_modules/@types"]
   },
   "include": ["vite.config.ts", "electron.vite.config.ts", "electron/**/*"],
-  "exclude": ["node_modules", "**/*.spec.ts", "dist/**/*"]
+  "exclude": ["node_modules", "**/*.spec.ts", "dist/**/*"],
+  "references": [{ "path": "./tsconfig.main.json" }]
 }
