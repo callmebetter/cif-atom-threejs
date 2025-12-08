@@ -20,7 +20,7 @@
 </template>
 
 <script setup lang="ts">
-import { CifParser } from '@/utils/cifParser'
+import { CifParser } from '@/utils/cifParserV1'
 
 interface Props {
   cifData: {

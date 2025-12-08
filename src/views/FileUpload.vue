@@ -26,7 +26,7 @@
       <div v-if="uploadedFiles.length > 0" class="file-list-section">
         <h3>已上传文件</h3>
         <el-table :data="uploadedFiles" style="width: 100%">
-          <el-table-column prop="name" label="文件名" min-width="200" />
+          <el-table-column prop="name" label="文件名" min-width="160" />
           <el-table-column prop="type" label="类型" width="80">
             <template #default="{ row }">
               <el-tag :type="getTypeTagType(row.type)">{{ row.type.toUpperCase() }}</el-tag>
