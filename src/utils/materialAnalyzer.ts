@@ -430,6 +430,7 @@ class MaterialAnalyzer {
    */
   private generateFormula(cifData: CifData): string {
     const composition = this.getComposition(cifData)
+    console.log(`generateFormula composition, `,composition)
     const elements = Array.from(composition.entries()).sort(([a], [b]) => a.localeCompare(b))
     
     return elements.map(([element, count]) => {

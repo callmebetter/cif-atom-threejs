@@ -79,9 +79,11 @@ export class CifService {
    * Query CIF records with options
    */
   async queryCifRecords(
-    options: Parameters<NormalizedCifRepository["queryCifRecords"]>[0] = {},
+    options: Parameters<
+      NormalizedCifRepository["queryCifRecordsPaginated"]
+    >[0] = {},
   ) {
-    return this.cifRepo.queryCifRecords(options);
+    return this.cifRepo.queryCifRecordsPaginated(options);
   }
 
   /**
